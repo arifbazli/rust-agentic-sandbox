@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/host",
+    "crates/adapters/claude-code",
+    "crates/adapters/copilot-cli",
+    "crates/adapters/pi",
+    "crates/gate-pipeline",
+    "crates/research-agent",
+    "crates/lab-agents",
+    "crates/verifier",
+    "crates/audit",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+publish = false

@@ -1,0 +1,86 @@
+# lab/scope.toml
+#
+# STRUCTURAL BOUNDARY — not documentation.
+#
+# `host` derives every capability grant issued to attacker/defender sandbox
+# instances directly from the fields declared below. Nothing outside this
+# declaration is reachable by a lab agent, regardless of what it is
+# instructed or attempts to reason about. See CONTEXT.md, section 3
+# ("Lab scope lock") — this file is that lock's contents, not a description
+# of it.
+#
+# THIS IS A TEMPLATE. Every value below is a placeholder. Replace all of
+# them with real, owned lab identifiers before this file is used to derive
+# any capability grant. An unpopulated or placeholder scope must never be
+# treated as a valid grant source.
+
+[environment]
+# Human-readable name for this lab environment, used in audit log entries.
+name = "example-lab"
+
+# Cloud/account identifiers the lab is confined to. Format depends on
+# provider; declare only what you own and control.
+[environment.account]
+provider = "aws"                 # e.g. "aws", "azure", "gcp", "on-prem"
+account_id = "000000000000"      # placeholder — replace with a real, owned account ID
+region = "us-east-1"
+
+# Network boundary the lab may operate within.
+[environment.network]
+vpc_id = "vpc-00000000"
+allowed_cidrs = ["10.42.0.0/24"]
+
+# Specific hosts/resources in scope, identified explicitly. No wildcards —
+# every reachable target must be enumerated here individually.
+[[environment.targets]]
+id = "target-001"
+type = "ec2-instance"             # e.g. "ec2-instance", "container", "vm"
+identifier = "i-0000000000000000" # placeholder — replace with a real, owned resource ID
+description = "Example placeholder target — replace before use."
+
+# -----------------------------------------------------------------------------
+# Allowed technique categories
+# -----------------------------------------------------------------------------
+# Technique categories the research-agent queue may draw on and lab-agents may
+# execute within this scope. An empty or absent category is NOT in scope.
+
+[techniques]
+allowed_categories = [
+    "T1059", # Command and Scripting Interpreter (example)
+    "T1078", # Valid Accounts (example)
+]
+
+# Explicit source allowlist for technique ingestion (see CONTEXT.md, section 4).
+# research-agent must reject anything not drawn from these sources.
+allowed_sources = [
+    "mitre-attack",
+    "cve-nvd",
+    "atomic-red-team",
+    "sigma",
+]
+
+# -----------------------------------------------------------------------------
+# Explicit exclusions
+# -----------------------------------------------------------------------------
+# Anything listed here is excluded even if it would otherwise match an
+# allowed category or fall within the account/network boundary above.
+# Exclusions always take precedence over allowances.
+
+[exclusions]
+technique_categories = [
+    "T1499", # Endpoint Denial of Service — excluded (example)
+]
+targets = [
+    "i-9999999999999999", # excluded resource — replace/remove (example)
+]
+notes = "Populate with anything explicitly out of bounds, even if technically reachable."
+
+# -----------------------------------------------------------------------------
+# Validity window (optional)
+# -----------------------------------------------------------------------------
+# If set, capability grants derived from this file are only valid between
+# these timestamps. Leave unset for an open-ended scope.
+
+[validity]
+starts_at = "2026-01-01T00:00:00Z"
+ends_at = "2026-01-08T00:00:00Z"
