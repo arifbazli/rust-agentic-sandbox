@@ -22,5 +22,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   capability grants will be derived from (not yet wired to any grant logic).
 - `.gitignore` for build artifacts.
 
-No capability broker, sandbox execution, agent logic, or harness-adapter
-logic is implemented yet — scaffolding and documentation only.
+> **Status**: no capability broker, sandbox execution, agent logic, or
+> harness-adapter logic is implemented yet — scaffolding and documentation
+> only.

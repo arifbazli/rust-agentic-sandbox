@@ -2,7 +2,17 @@
 
 This file is the source of truth for the non-negotiable policies behind `rust-agentic-sandbox`. It governs both the harness gate (Claude Code / Copilot CLI / Pi adapters) and the attack/defend lab.
 
-**If you are an agent or contributor resuming work on this project — especially in a different CLI/harness than the one that started it — read this file before making any change.** Policy lives here, not in any single session's prompt history. If a request conflicts with a section below, the section below wins; flag the conflict instead of resolving it silently.
+> **Read this first if you're resuming work** — especially in a different CLI/harness than the one that started it. Policy lives here, not in any single session's prompt history. If a request conflicts with a section below, the section wins; flag the conflict instead of resolving it silently.
+
+**At a glance** — seven non-negotiable policies:
+
+1. [Verdict authority](#1-verdict-authority) — deterministic Rust only; LLMs summarize but never decide.
+2. [Capability-default-deny](#2-capability-default-deny) — zero capabilities until explicitly granted.
+3. [Lab scope lock](#3-lab-scope-lock) — hard-capped to `lab/scope.toml`, enforced structurally.
+4. [Research agent allowlist](#4-research-agent-allowlist) — MITRE ATT&CK / CVE-NVD / Atomic Red Team / Sigma only.
+5. [Deterministic instrumentation](#5-deterministic-instrumentation) — every grant, denial, and verdict logged in full.
+6. [Honest negative results](#6-honest-negative-results) — no finding is a valid, recorded outcome.
+7. [Harness-adapter parity](#7-harness-adapter-parity) — same verdict standard across every adapter.
 
 ---
 
@@ -67,4 +77,4 @@ If a harness's hook payload needs adapter-specific translation, that translation
 
 ## Scope of this session
 
-This document describes policy for a system whose capability broker, sandbox execution, agent logic, and adapter logic are **not yet implemented**. Scaffolding sessions must not implement any of the above mechanisms — only document them here, in the workspace layout, and in `lab/scope.toml`'s template shape. See `CHANGELOG.md` for what actually exists today.
+> **Status**: this document describes policy for a system whose capability broker, sandbox execution, agent logic, and adapter logic are **not yet implemented**. Scaffolding sessions must not implement any of the above mechanisms — only document them here, in the workspace layout, and in `lab/scope.toml`'s template shape. See [`CHANGELOG.md`](CHANGELOG.md) for what actually exists today.
