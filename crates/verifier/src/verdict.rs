@@ -81,3 +81,137 @@ pub fn persist(store: &AuditStore, records: &[VerdictRecord]) -> anyhow::Result<
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use host::ScopeConfig;
+    use research_agent::Technique;
+
+    fn fake_technique(id: &str, guid: &str) -> Technique {
+        Technique {
+            id: id.to_string(),
+            guid: guid.to_string(),
+            name: "Test Technique".to_string(),
+            description: "unit-test fixture, not a real ingested technique".to_string(),
+            source: "atomic-red-team".to_string(),
+            test_command: "echo should-never-run".to_string(),
+            platform: "windows".to_string(),
+        }
+    }
+
+    /// End-to-end over the real Step 2/3 pipeline against the real
+    /// `lab/scope.toml`: the technique must verify as `Blocked`, with a
+    /// reason that traces back to the actual denial (the expired validity
+    /// window), not a generic placeholder string.
+    #[test]
+    fn real_pipeline_run_yields_blocked_with_a_traceable_reason() {
+        let scope = ScopeConfig::load("../../lab/scope.toml").expect("lab/scope.toml should parse");
+        let dir = tempfile::tempdir().unwrap();
+        let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
+        store.put_technique("test-guid-1", &fake_technique("T1059", "test-guid-1")).unwrap();
+
+        lab_agents::attempt_all(&scope, &store).unwrap();
+        lab_agents::check_all(&store).unwrap();
+
+        let records = verify(&store).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].technique_id, "T1059");
+        match &records[0].verdict {
+            Verdict::Blocked { reason } => {
+                assert!(
+                    reason.contains("validity window"),
+                    "expected the verdict's reason to trace back to the expired validity window, got: {reason}"
+                );
+            }
+            other => panic!("expected Blocked, got {other:?}"),
+        }
+    }
+
+    /// Synthetic fixture: a capability grant followed by a detection check
+    /// that found the signal present must classify as `Detected`. This
+    /// path is unreachable via real execution today (the scope denies
+    /// everything), but the classification logic itself must still be
+    /// correct — otherwise a future bug here would go unnoticed.
+    #[test]
+    fn synthetic_grant_with_signal_present_yields_detected() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
+        let now = Utc::now();
+        store
+            .log_event(&AuditEvent {
+                timestamp: now,
+                actor: "test-fixture".to_string(),
+                technique_id: "T9001".to_string(),
+                kind: EventKind::CapabilityGranted,
+                detail: "synthetic grant for test".to_string(),
+            })
+            .unwrap();
+        store
+            .log_event(&AuditEvent {
+                timestamp: now,
+                actor: "test-fixture".to_string(),
+                technique_id: "T9001".to_string(),
+                kind: EventKind::DetectionChecked,
+                detail: "expected signal: synthetic — present: true".to_string(),
+            })
+            .unwrap();
+
+        let records = verify(&store).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].verdict, Verdict::Detected);
+    }
+
+    /// Synthetic fixture: a capability grant followed by a detection check
+    /// that did NOT find the signal must classify as `Missed` — proving
+    /// Detected and Missed are genuinely distinguishable, not both
+    /// aliases for the same fallthrough.
+    #[test]
+    fn synthetic_grant_with_signal_absent_yields_missed() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
+        let now = Utc::now();
+        store
+            .log_event(&AuditEvent {
+                timestamp: now,
+                actor: "test-fixture".to_string(),
+                technique_id: "T9002".to_string(),
+                kind: EventKind::CapabilityGranted,
+                detail: "synthetic grant for test".to_string(),
+            })
+            .unwrap();
+        store
+            .log_event(&AuditEvent {
+                timestamp: now,
+                actor: "test-fixture".to_string(),
+                technique_id: "T9002".to_string(),
+                kind: EventKind::DetectionChecked,
+                detail: "expected signal: synthetic — present: false".to_string(),
+            })
+            .unwrap();
+
+        let records = verify(&store).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].verdict, Verdict::Missed);
+    }
+
+    /// `persist` must write records that are byte-for-byte retrievable via
+    /// the audit store's verdict table.
+    #[test]
+    fn persist_writes_verdicts_that_are_retrievable() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
+        let record = VerdictRecord {
+            technique_id: "T1059".to_string(),
+            verdict: Verdict::Blocked { reason: "test reason".to_string() },
+            timestamp: Utc::now(),
+        };
+
+        persist(&store, std::slice::from_ref(&record)).unwrap();
+
+        let retrieved: Vec<(String, VerdictRecord)> = store.verdicts().unwrap();
+        assert_eq!(retrieved.len(), 1);
+        assert_eq!(retrieved[0].0, "T1059");
+        assert_eq!(retrieved[0].1.verdict, record.verdict);
+    }
+}
