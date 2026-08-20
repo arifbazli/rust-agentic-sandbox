@@ -1,8 +1,6 @@
 # rust-agentic-sandbox
 
-A trusted Rust orchestrator that puts AI coding agents and AI security agents behind the same deterministic gate: it intercepts every file write, edit, and shell command an agent proposes, runs it through a capability-scoped WebAssembly sandbox, and lets a non-LLM verdict engine — never the model itself — decide what happens.
-
-> **Status**: scaffold only. 9 crate stubs exist, each with an empty `[dependencies]` — no `wasmtime`, `tokio`, or any other crate is wired in yet, and no broker/sandbox/agent logic exists. See [CHANGELOG.md](./CHANGELOG.md).
+A trusted Rust orchestrator that puts AI coding agents and AI security agents behind the same deterministic gate: it intercepts every file write, edit, and shell command an agent proposes, runs it through a capability-scoped sandbox, and lets a non-LLM verdict engine — never the model itself — decide what happens.
 
 ## Architecture
 
@@ -19,45 +17,46 @@ flowchart TB
     ORCH --> VER[Verifier] --> AUDIT[(Audit Log)]
 ```
 
-- **Harness gate** — catches proposed writes/edits/commands via each tool's native hook, before they touch disk or execute.
-- **Attack/defend lab** — a research agent feeds vetted techniques to a scoped attacker/defender pair ([lab/scope.toml](./lab/scope.toml)).
-- **Shared core** — both paths converge on one capability broker, one verdict engine, one audit log. LLMs summarize verdicts; they never author or override them. Full policy: [CONTEXT.md](./CONTEXT.md).
+## Status
 
-Planned stack (not yet a dependency of any crate): `wasmtime`/WASI P2, `tokio`, `petgraph`, `aws-sdk-bedrockruntime`, `serde`, `tracing`, `redb`.
+**Real and tested:** `host` (capability broker, scope parser), `audit` (redb-backed log), `research-agent` (live Atomic Red Team ingestion), `lab-agents` (attacker + defender), `verifier` (deterministic verdicts) — the full attack/defend loop runs end-to-end. **13/13 tests passing.**
+
+**Stub only, no logic yet:** `gate-pipeline`, `adapter-claude-code`, `adapter-copilot-cli`, `adapter-pi` — empty dependencies, doc comments only. The harness-gate half of this project isn't built.
+
+`lab/scope.toml` is still the unpopulated placeholder template (expired validity window) — every lab technique attempt is correctly denied by design. See [CONTEXT.md](./CONTEXT.md).
 
 ## Layout
 
 ```
 crates/
-├── host/            # broker + verdict engine
-├── adapters/         # claude-code, copilot-cli, pi
-├── gate-pipeline/     # static analysis + sandbox dry-run
-├── research-agent/    # threat-intel ingestion
-├── lab-agents/         # attacker + defender stubs
-├── verifier/            # deterministic outcome checks
-└── audit/                # tracing + redb log
-lab/scope.toml               # lab capability boundary
+├── host/            # real — capability broker, scope parser
+├── audit/            # real — redb-backed event/verdict log
+├── research-agent/    # real — Atomic Red Team ingestion
+├── lab-agents/         # real — attacker + defender
+├── verifier/            # real — deterministic verdicts
+├── gate-pipeline/        # stub — no logic yet
+└── adapters/              # stub — claude-code, copilot-cli, pi
+lab/scope.toml                # placeholder template, expired
 ```
-
-## Development
-
-**Recommended: GitHub Codespaces**, not just an option — open via the repo's **Code** button → **Codespaces** → **Create codespace on main**. The devcontainer (`.devcontainer/devcontainer.json`) gives a ready-to-go Rust toolchain with `clippy`/`rustfmt`, no local setup.
-
-Local development needs a working C/C++ linker (for build scripts and proc-macros like `serde_derive`) in addition to `cargo`/`rustc`. A prior session on this repo hit exactly that gap on a fresh Windows machine — no MSVC Build Tools and no MinGW/gcc — and had to install a toolchain mid-session before `cargo check` could even run. Codespaces sidesteps this entirely.
 
 ## Quickstart
 
+**Codespaces (supported path)** — Code button → Codespaces → Create codespace on `main`. Toolchain, `sshd`, and the cargo-cache permission fix are all preconfigured.
+
+**Local** needs a working C/C++ linker (for build scripts and proc-macros) in addition to `cargo`/`rustc` — this project's own history hit that exact gap on a fresh Windows machine. Codespaces avoids it entirely.
+
 ```bash
-git clone https://github.com/arifbazli/rust-agentic-sandbox.git
-cd rust-agentic-sandbox
 cargo check --workspace
+cargo test --workspace
 ```
 
-No runnable binary yet — see [CHANGELOG.md](./CHANGELOG.md) for progress.
+## Policy & history
+
+Non-negotiable design policy: [CONTEXT.md](./CONTEXT.md). What's shipped, in order: [CHANGELOG.md](./CHANGELOG.md).
 
 ## Contributing
 
-Feature branch + PR against `main`. Required: passing CI (`cargo check`, `cargo test`, `cargo clippy`); 0 approving reviews currently required (solo maintainer), enforced for admins too — see actual settings via `gh api repos/arifbazli/rust-agentic-sandbox/branches/main/protection`. Policy lives in [CONTEXT.md](./CONTEXT.md).
+Feature branch + PR against `main`. Required: passing CI (`cargo check`, `cargo test`, `cargo clippy`); 0 approving reviews currently required (solo maintainer), enforced for admins too; no force-push or deletion on `main`.
 
 ## License
 
