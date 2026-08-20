@@ -6,3 +6,9 @@
 //! workspace feeds proposals or evidence into it and receives a verdict
 //! back. LLM-backed agents may summarize a verdict but never author or
 //! override one.
+
+mod broker;
+mod scope;
+
+pub use broker::{evaluate, CapabilityDecision};
+pub use scope::{Account, Environment, Exclusions, Network, ScopeConfig, Target, Techniques, Validity};
