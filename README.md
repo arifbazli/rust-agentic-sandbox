@@ -39,6 +39,12 @@ crates/
 lab/scope.toml               # lab capability boundary
 ```
 
+## Development
+
+**Recommended: GitHub Codespaces**, not just an option — open via the repo's **Code** button → **Codespaces** → **Create codespace on main**. The devcontainer (`.devcontainer/devcontainer.json`) gives a ready-to-go Rust toolchain with `clippy`/`rustfmt`, no local setup.
+
+Local development needs a working C/C++ linker (for build scripts and proc-macros like `serde_derive`) in addition to `cargo`/`rustc`. A prior session on this repo hit exactly that gap on a fresh Windows machine — no MSVC Build Tools and no MinGW/gcc — and had to install a toolchain mid-session before `cargo check` could even run. Codespaces sidesteps this entirely.
+
 ## Quickstart
 
 ```bash
