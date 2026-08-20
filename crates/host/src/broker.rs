@@ -36,3 +36,79 @@ pub fn evaluate(scope: &ScopeConfig, category: &str, now: DateTime<Utc>) -> Capa
     }
     CapabilityDecision::Granted
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::TimeZone;
+
+    const VALID_WINDOW_TOML: &str = r#"
+        [environment]
+        name = "test-lab"
+        [environment.account]
+        provider = "aws"
+        account_id = "111111111111"
+        region = "us-east-1"
+        [environment.network]
+        vpc_id = "vpc-test"
+        [techniques]
+        allowed_categories = ["T1059"]
+        allowed_sources = ["atomic-red-team"]
+        [exclusions]
+        technique_categories = ["T1499"]
+        [validity]
+        starts_at = "2020-01-01T00:00:00Z"
+        ends_at = "2099-01-01T00:00:00Z"
+    "#;
+
+    fn parse(toml_str: &str) -> ScopeConfig {
+        toml::from_str(toml_str).expect("test scope toml should parse")
+    }
+
+    #[test]
+    fn real_repo_scope_is_expired_and_denies_everything() {
+        let scope = ScopeConfig::load("../../lab/scope.toml")
+            .expect("lab/scope.toml should exist and parse from the host crate's directory");
+        let decision = evaluate(&scope, "T1059", Utc::now());
+        assert!(
+            matches!(decision, CapabilityDecision::Denied { .. }),
+            "the real lab/scope.toml has an expired validity window and must deny every category"
+        );
+    }
+
+    #[test]
+    fn expired_validity_window_denies_before_any_other_check() {
+        let scope = parse(VALID_WINDOW_TOML);
+        // Force `now` outside the window even though the category is allowed and not excluded.
+        let long_after = Utc.with_ymd_and_hms(2100, 1, 1, 0, 0, 0).unwrap();
+        let decision = evaluate(&scope, "T1059", long_after);
+        assert!(matches!(decision, CapabilityDecision::Denied { .. }));
+    }
+
+    #[test]
+    fn excluded_category_is_denied_even_within_a_valid_window() {
+        let scope = parse(VALID_WINDOW_TOML);
+        let now = Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap();
+        let decision = evaluate(&scope, "T1499", now);
+        match decision {
+            CapabilityDecision::Denied { reason } => assert!(reason.contains("excluded")),
+            CapabilityDecision::Granted => panic!("T1499 is explicitly excluded and must never be granted"),
+        }
+    }
+
+    #[test]
+    fn category_not_in_allowlist_is_denied() {
+        let scope = parse(VALID_WINDOW_TOML);
+        let now = Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap();
+        let decision = evaluate(&scope, "T9999", now);
+        assert!(matches!(decision, CapabilityDecision::Denied { .. }));
+    }
+
+    #[test]
+    fn allowed_non_excluded_category_within_a_valid_window_is_granted() {
+        let scope = parse(VALID_WINDOW_TOML);
+        let now = Utc.with_ymd_and_hms(2025, 1, 1, 0, 0, 0).unwrap();
+        let decision = evaluate(&scope, "T1059", now);
+        assert_eq!(decision, CapabilityDecision::Granted);
+    }
+}

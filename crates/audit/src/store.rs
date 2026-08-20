@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::Result;
 use redb::{Database, ReadableDatabase, ReadableTable, TableDefinition};
@@ -14,6 +15,13 @@ const VERDICTS: TableDefinition<&str, &str> = TableDefinition::new("verdicts");
 /// tables (events, the ingested technique queue, and verdict summaries).
 pub struct AuditStore {
     db: Database,
+    /// Per-process monotonic counter, appended to every event key so two
+    /// events for the same technique logged within the same nanosecond
+    /// never collide and silently overwrite each other. Without this, a
+    /// caller that stamps a batch of related events with one captured
+    /// `Utc::now()` (a perfectly reasonable thing to do) would lose all
+    /// but the last — a real bug this fixes, not a hypothetical one.
+    event_seq: AtomicU64,
 }
 
 impl AuditStore {
@@ -29,15 +37,17 @@ impl AuditStore {
             write_txn.open_table(VERDICTS)?;
         }
         write_txn.commit()?;
-        Ok(Self { db })
+        Ok(Self { db, event_seq: AtomicU64::new(0) })
     }
 
     /// Logs one audit event. Never sampled, never summarized before write —
     /// see CONTEXT.md section 5.
     pub fn log_event(&self, event: &AuditEvent) -> Result<()> {
+        let seq = self.event_seq.fetch_add(1, Ordering::SeqCst);
         let key = format!(
-            "{:020}-{}",
+            "{:020}-{:020}-{}",
             event.timestamp.timestamp_nanos_opt().unwrap_or_default(),
+            seq,
             event.technique_id
         );
         let value = serde_json::to_string(event)?;
