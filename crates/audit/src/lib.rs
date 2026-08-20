@@ -4,3 +4,9 @@
 //! Every capability grant, denial, and verdict is recorded via `tracing`
 //! and persisted to a `redb`-backed store — not sampled, and not
 //! LLM-summarized before logging.
+
+mod event;
+mod store;
+
+pub use event::{AuditEvent, EventKind};
+pub use store::AuditStore;

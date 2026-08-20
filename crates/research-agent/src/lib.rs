@@ -4,3 +4,11 @@
 //! (MITRE ATT&CK, CVE/NVD, Atomic Red Team, Sigma rules) and produces a
 //! structured technique reference. Never generates novel exploit code or
 //! freeform "how would I attack X" reasoning.
+
+mod atomic_red_team;
+mod ingest;
+mod technique;
+
+pub use atomic_red_team::{fetch_category, FetchOutcome};
+pub use ingest::{ingest, IngestReport};
+pub use technique::Technique;
