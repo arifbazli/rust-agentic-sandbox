@@ -21,7 +21,7 @@
       }
     }
   },
-  "postCreateCommand": "rustup component add clippy rustfmt && cargo check --workspace",
+  "postCreateCommand": "sudo chown -R vscode:vscode /usr/local/cargo/registry && rustup component add clippy rustfmt && cargo check --workspace",
   "hostRequirements": {
     "cpus": 4,
     "memory": "8gb",
