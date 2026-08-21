@@ -5,3 +5,9 @@
 //! Rust, semgrep for other languages) and then a capability-scoped
 //! `wasmtime`/WASI-Preview-2 sandbox dry-run, producing the evidence that
 //! `host` uses to compute a deterministic verdict.
+
+mod proposal;
+mod static_analysis;
+
+pub use proposal::Proposal;
+pub use static_analysis::static_analyze;

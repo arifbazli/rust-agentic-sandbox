@@ -185,6 +185,10 @@ dependencies = [
 [[package]]
 name = "gate-pipeline"
 version = "0.1.0"
+dependencies = [
+ "host",
+ "tempfile",
+]
 
 [[package]]
 name = "getrandom"
