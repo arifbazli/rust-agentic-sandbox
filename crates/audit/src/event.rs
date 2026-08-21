@@ -10,8 +10,10 @@ pub struct AuditEvent {
     pub timestamp: DateTime<Utc>,
     /// Which component emitted this, e.g. "lab-agents::attacker", "host::broker".
     pub actor: String,
-    /// ATT&CK technique ID this event concerns, empty if not applicable.
-    pub technique_id: String,
+    /// Identifier of the subject this event concerns — an ATT&CK technique
+    /// ID for lab-loop events, or a harness-gate proposal ID for
+    /// gate-pipeline events. Empty if not applicable.
+    pub subject_id: String,
     pub kind: EventKind,
     /// Human-readable reason/context for the event.
     pub detail: String,
@@ -25,4 +27,17 @@ pub enum EventKind {
     ExecutionBlocked,
     DetectionChecked,
     Verdict,
+    /// `gate-pipeline`'s deny-pattern static analysis found nothing (used
+    /// for `ShellCommand` proposals only — `FileWrite` proposals log
+    /// `CapabilityGranted`/`CapabilityDenied` instead, since their check is
+    /// a genuine capability decision, not a deny-pattern scan).
+    StaticAnalysisClean,
+    /// `gate-pipeline`'s deny-pattern static analysis matched a rule.
+    StaticAnalysisFlagged,
+    /// `gate-pipeline`'s real WASI sandbox dry-run write succeeded.
+    SandboxDryRunSucceeded,
+    /// `gate-pipeline`'s real WASI sandbox dry-run write was denied —
+    /// either the capability check failed before any sandbox was
+    /// constructed, or the WASI runtime itself rejected the write.
+    SandboxDryRunDenied,
 }

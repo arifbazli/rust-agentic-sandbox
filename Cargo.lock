@@ -597,6 +597,8 @@ name = "gate-pipeline"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "audit",
+ "chrono",
  "host",
  "tempfile",
  "wasmtime",

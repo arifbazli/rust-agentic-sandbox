@@ -9,6 +9,7 @@
 
 mod broker;
 mod gate_policy;
+pub mod gate_verdict;
 mod scope;
 
 pub use broker::{evaluate, CapabilityDecision};

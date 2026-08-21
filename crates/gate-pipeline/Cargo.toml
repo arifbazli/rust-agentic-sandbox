@@ -6,6 +6,8 @@ publish.workspace = true
 
 [dependencies]
 anyhow = "1.0.104"
+audit = { version = "0.1.0", path = "../audit" }
+chrono = { version = "0.4.45", features = ["serde"] }
 host = { version = "0.1.0", path = "../host" }
 tempfile = "3.27.0"
 wasmtime = { version = "48", default-features = false, features = ["runtime", "cranelift", "anyhow"] }
