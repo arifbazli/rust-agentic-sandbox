@@ -7,7 +7,9 @@
 //! `host` uses to compute a deterministic verdict.
 
 mod proposal;
+mod sandbox;
 mod static_analysis;
 
 pub use proposal::Proposal;
+pub use sandbox::{dry_run_write, SandboxOutcome};
 pub use static_analysis::static_analyze;
