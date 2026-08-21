@@ -18,11 +18,11 @@ flowchart TB
     AUDIT --> VER{{verifier}}
 ```
 
-## Status — 46/46 tests passing
+## Status — 56/56 tests passing
 
-**Real:** `host` (capability broker + gate verdict), `audit` (redb log), `research-agent` (live Atomic Red Team ingestion), `lab-agents` (attacker + defender), `verifier` (lab-loop verdicts), `gate-pipeline` (deny-pattern static analysis + a real WASI sandbox dry-run) — all wired end-to-end via the shared audit log.
+**Real:** `host`, `audit`, `research-agent`, `lab-agents`, `verifier`, `gate-pipeline` (deny-pattern static analysis + a real WASI sandbox dry-run) — all wired end-to-end via the shared audit log. `adapter-claude-code` is now real too: a fail-closed `PreToolUse` hook, verified against Claude Code's live hook docs, and the first thing that actually calls `gate-pipeline`.
 
-**Stub only:** `adapter-claude-code`, `adapter-copilot-cli`, `adapter-pi` — no coding-agent hook calls `gate-pipeline` yet.
+**Stub only:** `adapter-copilot-cli`, `adapter-pi` — no hook for either harness calls `gate-pipeline` yet.
 
 `lab/scope.toml` is still the unpopulated placeholder template (expired validity window) — every lab technique attempt is correctly denied by design. Full policy: [CONTEXT.md](./CONTEXT.md).
 
