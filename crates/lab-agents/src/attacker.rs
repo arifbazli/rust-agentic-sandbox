@@ -37,7 +37,7 @@ pub fn attempt_all(scope: &ScopeConfig, store: &AuditStore) -> anyhow::Result<Ve
         store.log_event(&AuditEvent {
             timestamp: now,
             actor: "lab-agents::attacker".to_string(),
-            technique_id: technique.id.clone(),
+            subject_id: technique.id.clone(),
             kind,
             detail,
         })?;
@@ -92,7 +92,7 @@ mod tests {
         let events = store.events().unwrap();
         assert_eq!(events.len(), 1, "every attempt must produce exactly one logged event");
         assert_eq!(events[0].kind, EventKind::CapabilityDenied);
-        assert_eq!(events[0].technique_id, "T1059");
+        assert_eq!(events[0].subject_id, "T1059");
 
         let reached_execution = events
             .iter()

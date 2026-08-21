@@ -8,7 +8,10 @@
 //! override one.
 
 mod broker;
+mod gate_policy;
+pub mod gate_verdict;
 mod scope;
 
 pub use broker::{evaluate, CapabilityDecision};
+pub use gate_policy::evaluate_file_write;
 pub use scope::{Account, Environment, Exclusions, Network, ScopeConfig, Target, Techniques, Validity};

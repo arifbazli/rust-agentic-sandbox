@@ -48,7 +48,7 @@ impl AuditStore {
             "{:020}-{:020}-{}",
             event.timestamp.timestamp_nanos_opt().unwrap_or_default(),
             seq,
-            event.technique_id
+            event.subject_id
         );
         let value = serde_json::to_string(event)?;
         let write_txn = self.db.begin_write()?;

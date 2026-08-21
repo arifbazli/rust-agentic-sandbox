@@ -38,7 +38,7 @@ pub fn check_all(store: &AuditStore) -> anyhow::Result<Vec<DetectionResult>> {
             .iter()
             .rev()
             .find(|e| {
-                e.technique_id == technique.id
+                e.subject_id == technique.id
                     && matches!(e.kind, EventKind::CapabilityGranted | EventKind::CapabilityDenied)
             })
             .cloned();
@@ -47,7 +47,7 @@ pub fn check_all(store: &AuditStore) -> anyhow::Result<Vec<DetectionResult>> {
         store.log_event(&AuditEvent {
             timestamp: Utc::now(),
             actor: "lab-agents::defender".to_string(),
-            technique_id: technique.id.clone(),
+            subject_id: technique.id.clone(),
             kind: EventKind::DetectionChecked,
             detail: format!(
                 "expected signal: {} — present: {signal_present}",

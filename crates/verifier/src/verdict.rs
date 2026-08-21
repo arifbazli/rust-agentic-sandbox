@@ -31,21 +31,21 @@ pub struct VerdictRecord {
 pub fn verify(store: &AuditStore) -> anyhow::Result<Vec<VerdictRecord>> {
     let events = store.events()?;
 
-    let mut technique_ids: BTreeSet<String> = BTreeSet::new();
+    let mut subject_ids: BTreeSet<String> = BTreeSet::new();
     for event in &events {
-        if !event.technique_id.is_empty() {
-            technique_ids.insert(event.technique_id.clone());
+        if !event.subject_id.is_empty() {
+            subject_ids.insert(event.subject_id.clone());
         }
     }
 
-    let mut records = Vec::with_capacity(technique_ids.len());
-    for id in technique_ids {
-        let technique_events: Vec<&AuditEvent> = events.iter().filter(|e| e.technique_id == id).collect();
+    let mut records = Vec::with_capacity(subject_ids.len());
+    for id in subject_ids {
+        let subject_events: Vec<&AuditEvent> = events.iter().filter(|e| e.subject_id == id).collect();
 
-        let denied = technique_events.iter().find(|e| e.kind == EventKind::CapabilityDenied);
-        let blocked = technique_events.iter().find(|e| e.kind == EventKind::ExecutionBlocked);
-        let granted = technique_events.iter().find(|e| e.kind == EventKind::CapabilityGranted);
-        let detection_checked = technique_events.iter().rev().find(|e| e.kind == EventKind::DetectionChecked);
+        let denied = subject_events.iter().find(|e| e.kind == EventKind::CapabilityDenied);
+        let blocked = subject_events.iter().find(|e| e.kind == EventKind::ExecutionBlocked);
+        let granted = subject_events.iter().find(|e| e.kind == EventKind::CapabilityGranted);
+        let detection_checked = subject_events.iter().rev().find(|e| e.kind == EventKind::DetectionChecked);
 
         let verdict = if let Some(event) = denied {
             Verdict::Blocked { reason: event.detail.clone() }
@@ -66,7 +66,7 @@ pub fn verify(store: &AuditStore) -> anyhow::Result<Vec<VerdictRecord>> {
             }
         };
 
-        let timestamp = technique_events.last().map(|e| e.timestamp).unwrap_or_else(Utc::now);
+        let timestamp = subject_events.last().map(|e| e.timestamp).unwrap_or_else(Utc::now);
         records.push(VerdictRecord { technique_id: id, verdict, timestamp });
     }
 
@@ -142,7 +142,7 @@ mod tests {
             .log_event(&AuditEvent {
                 timestamp: now,
                 actor: "test-fixture".to_string(),
-                technique_id: "T9001".to_string(),
+                subject_id: "T9001".to_string(),
                 kind: EventKind::CapabilityGranted,
                 detail: "synthetic grant for test".to_string(),
             })
@@ -151,7 +151,7 @@ mod tests {
             .log_event(&AuditEvent {
                 timestamp: now,
                 actor: "test-fixture".to_string(),
-                technique_id: "T9001".to_string(),
+                subject_id: "T9001".to_string(),
                 kind: EventKind::DetectionChecked,
                 detail: "expected signal: synthetic — present: true".to_string(),
             })
@@ -175,7 +175,7 @@ mod tests {
             .log_event(&AuditEvent {
                 timestamp: now,
                 actor: "test-fixture".to_string(),
-                technique_id: "T9002".to_string(),
+                subject_id: "T9002".to_string(),
                 kind: EventKind::CapabilityGranted,
                 detail: "synthetic grant for test".to_string(),
             })
@@ -184,7 +184,7 @@ mod tests {
             .log_event(&AuditEvent {
                 timestamp: now,
                 actor: "test-fixture".to_string(),
-                technique_id: "T9002".to_string(),
+                subject_id: "T9002".to_string(),
                 kind: EventKind::DetectionChecked,
                 detail: "expected signal: synthetic — present: false".to_string(),
             })
