@@ -109,12 +109,6 @@ mod tests {
         let scope_toml = r#"
             [environment]
             name = "test-lab"
-            [environment.account]
-            provider = "aws"
-            account_id = "111111111111"
-            region = "us-east-1"
-            [environment.network]
-            vpc_id = "vpc-test"
             [techniques]
             allowed_categories = ["T1059"]
             allowed_sources = ["atomic-red-team"]
