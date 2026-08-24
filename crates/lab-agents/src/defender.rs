@@ -94,12 +94,17 @@ mod tests {
         }
     }
 
-    /// Against the real (denied) audit log produced by Step 2's attacker
-    /// run, the defender must report the signal present and reference the
-    /// actual CapabilityDenied event — never a CapabilityGranted one, since
-    /// nothing can be granted under the current scope.
+    /// Against the real (now-populated) `lab/scope.toml`, T1059 is granted
+    /// but still has no execution engine to actually run it — the defender
+    /// must still report the signal present, referencing the real
+    /// `ExecutionBlocked` event, proving `check_all`'s matcher recognizes a
+    /// granted-but-blocked attempt as a genuine signal, not just an
+    /// outright denial. Before Step 2a/2b's path enforcement and populated
+    /// scope, this technique was denied outright instead; this test's
+    /// name and assertion changed to match that real, verified shift, not
+    /// a guess about what would happen.
     #[test]
-    fn reports_present_and_references_the_real_capability_denied_event() {
+    fn reports_present_and_references_the_real_execution_blocked_event() {
         let scope = ScopeConfig::load("../../lab/scope.toml").expect("lab/scope.toml should parse");
         let dir = tempfile::tempdir().unwrap();
         let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
@@ -111,7 +116,7 @@ mod tests {
         assert_eq!(results.len(), 1);
         assert!(results[0].signal_present);
         let referenced = results[0].referenced_event.as_ref().expect("signal_present implies a referenced event");
-        assert_eq!(referenced.kind, EventKind::CapabilityDenied);
+        assert_eq!(referenced.kind, EventKind::ExecutionBlocked);
     }
 
     /// A technique that was queued but never attempted (no capability

@@ -107,14 +107,31 @@ mod tests {
         toml::from_str(toml_str).expect("test scope toml should parse")
     }
 
+    /// `lab/scope.toml` is no longer a permanent-deny placeholder (see
+    /// lab/scope.toml's own header) — it now genuinely grants T1059. This
+    /// test used to load that real file specifically to prove an
+    /// expired/placeholder scope denies everything; that scenario still
+    /// needs coverage, just decoupled from the real file's now-different
+    /// state, via a synthetic fixture shaped like the old placeholder.
     #[test]
-    fn real_repo_scope_is_expired_and_denies_everything() {
-        let scope = ScopeConfig::load("../../lab/scope.toml")
-            .expect("lab/scope.toml should exist and parse from the host crate's directory");
-        let decision = evaluate(&scope, "T1059", Path::new("../.."), None, Utc::now());
+    fn synthetic_expired_placeholder_scope_denies_everything() {
+        let expired_placeholder_toml = r#"
+            [environment]
+            name = "example-lab"
+            [techniques]
+            allowed_categories = ["T1059", "T1078"]
+            allowed_sources = ["mitre-attack", "cve-nvd", "atomic-red-team", "sigma"]
+            [exclusions]
+            technique_categories = ["T1499"]
+            [validity]
+            starts_at = "2020-01-01T00:00:00Z"
+            ends_at = "2020-01-08T00:00:00Z"
+        "#;
+        let scope = parse(expired_placeholder_toml);
+        let decision = evaluate(&scope, "T1059", Path::new("."), None, Utc::now());
         assert!(
             matches!(decision, CapabilityDecision::Denied { .. }),
-            "the real lab/scope.toml has an expired validity window and must deny every category"
+            "an expired/placeholder scope must deny every category"
         );
     }
 
