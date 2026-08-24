@@ -6,9 +6,11 @@ use chrono::Utc;
 /// agent reasoning — see CONTEXT.md section 1 ("Verdict authority").
 fn expected_signal(category: &str) -> &'static str {
     match category {
-        "T1059" => "a CapabilityGranted or CapabilityDenied event for a Command and Scripting Interpreter attempt",
-        "T1078" => "a CapabilityGranted or CapabilityDenied event for a Valid Accounts attempt",
-        _ => "a CapabilityGranted or CapabilityDenied event for this technique's attempt",
+        "T1059" => {
+            "a CapabilityGranted, CapabilityDenied, or ExecutionBlocked event for a Command and Scripting Interpreter attempt"
+        }
+        "T1078" => "a CapabilityGranted, CapabilityDenied, or ExecutionBlocked event for a Valid Accounts attempt",
+        _ => "a CapabilityGranted, CapabilityDenied, or ExecutionBlocked event for this technique's attempt",
     }
 }
 
@@ -22,12 +24,20 @@ pub struct DetectionResult {
 }
 
 /// For every queued technique, checks whether the expected capability-
-/// decision signal was logged. Note on what this currently proves: since
-/// every attempt this session was denied before execution (see
-/// attacker.rs), a "present" result here means "the denial itself was
-/// observably logged" — not "a real intrusion attempt was detected". The
-/// two only become distinguishable once `lab/scope.toml` grants real
-/// capabilities and executions can actually proceed.
+/// decision signal was logged.
+///
+/// The matcher recognizes `ExecutionBlocked` alongside
+/// `CapabilityGranted`/`CapabilityDenied`, found while preparing to
+/// populate a real `lab/scope.toml` for the first time: once a technique
+/// is genuinely granted but still blocked at the execution stage (no
+/// wasmtime/WASI-P2 engine exists yet — see attacker.rs's doc comment),
+/// the old matcher would have incorrectly reported `signal_present: false`
+/// for a technique that genuinely was attempted. `signal_present` means
+/// "the attempt was observably logged" — granted-but-blocked, denied
+/// outright, whichever — not "a real intrusion attempt was detected".
+/// Those two only become distinguishable once an execution engine exists
+/// and a `DetectionChecked` event can reference something that actually
+/// ran.
 pub fn check_all(store: &AuditStore) -> anyhow::Result<Vec<DetectionResult>> {
     let events = store.events()?;
     let queued: Vec<(String, research_agent::Technique)> = store.techniques()?;
@@ -39,7 +49,7 @@ pub fn check_all(store: &AuditStore) -> anyhow::Result<Vec<DetectionResult>> {
             .rev()
             .find(|e| {
                 e.subject_id == technique.id
-                    && matches!(e.kind, EventKind::CapabilityGranted | EventKind::CapabilityDenied)
+                    && matches!(e.kind, EventKind::CapabilityGranted | EventKind::CapabilityDenied | EventKind::ExecutionBlocked)
             })
             .cloned();
 
