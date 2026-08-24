@@ -95,7 +95,7 @@ mod tests {
         let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
         store.put_technique("test-guid-1", &fake_technique("T1059", "test-guid-1")).unwrap();
 
-        crate::attacker::attempt_all(&scope, &store).unwrap();
+        crate::attacker::attempt_all(&scope, std::path::Path::new("../.."), &store).unwrap();
         let results = check_all(&store).unwrap();
 
         assert_eq!(results.len(), 1);

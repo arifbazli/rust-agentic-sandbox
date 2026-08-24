@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use audit::{AuditEvent, AuditStore, EventKind};
 use chrono::Utc;
 use host::{evaluate, CapabilityDecision, ScopeConfig};
@@ -18,13 +20,24 @@ pub struct AttackAttempt {
 /// why that's a deliberate, disclosed gap rather than an oversight. Every
 /// attempt (granted or denied) is logged via `audit`, matching CONTEXT.md
 /// section 5.
-pub fn attempt_all(scope: &ScopeConfig, store: &AuditStore) -> anyhow::Result<Vec<AttackAttempt>> {
+///
+/// Every attempt is checked against the same declared local-directory
+/// target, if `scope` declares one — this v1 has no per-technique target
+/// path (`research_agent::Technique` carries none), so every attempt is
+/// understood to operate on the lab's own declared target directory as a
+/// whole, resolved relative to `workspace_root`. No declared local-directory
+/// target at all means no path is checked (unchanged, category-only
+/// behavior), matching every scope from before this path check existed.
+pub fn attempt_all(scope: &ScopeConfig, workspace_root: &Path, store: &AuditStore) -> anyhow::Result<Vec<AttackAttempt>> {
     let queued: Vec<(String, Technique)> = store.techniques()?;
     let mut attempts = Vec::with_capacity(queued.len());
 
+    let target_path =
+        scope.environment.targets.iter().find(|t| t.kind == "local-directory").map(|t| workspace_root.join(&t.identifier));
+
     for (guid, technique) in queued {
         let now = Utc::now();
-        let decision = evaluate(scope, &technique.id, now);
+        let decision = evaluate(scope, &technique.id, workspace_root, target_path.as_deref(), now);
 
         let (kind, detail) = match &decision {
             CapabilityDecision::Granted => (
@@ -80,7 +93,7 @@ mod tests {
 
         store.put_technique("test-guid-1", &fake_technique("T1059", "test-guid-1")).unwrap();
 
-        let attempts = attempt_all(&scope, &store).unwrap();
+        let attempts = attempt_all(&scope, Path::new("../.."), &store).unwrap();
 
         assert_eq!(attempts.len(), 1);
         assert!(
@@ -118,7 +131,7 @@ mod tests {
         let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
         store.put_technique("test-guid-2", &fake_technique("T1059", "test-guid-2")).unwrap();
 
-        let attempts = attempt_all(&scope, &store).unwrap();
+        let attempts = attempt_all(&scope, Path::new("."), &store).unwrap();
 
         assert_eq!(attempts[0].decision, CapabilityDecision::Granted);
         let events = store.events().unwrap();

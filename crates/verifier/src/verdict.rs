@@ -111,7 +111,7 @@ mod tests {
         let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
         store.put_technique("test-guid-1", &fake_technique("T1059", "test-guid-1")).unwrap();
 
-        lab_agents::attempt_all(&scope, &store).unwrap();
+        lab_agents::attempt_all(&scope, std::path::Path::new("../.."), &store).unwrap();
         lab_agents::check_all(&store).unwrap();
 
         let records = verify(&store).unwrap();
