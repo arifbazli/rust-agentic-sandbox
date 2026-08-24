@@ -9,34 +9,39 @@
 # ("Lab scope lock") — this file is that lock's contents, not a description
 # of it.
 #
-# THIS IS A TEMPLATE. Every value below is a placeholder. Replace all of
-# them with real, owned lab identifiers before this file is used to derive
-# any capability grant. An unpopulated or placeholder scope must never be
-# treated as a valid grant source.
+# This scope is intentionally container-local: no cloud account, no VPC,
+# no real network egress, and no target outside this repo's own
+# lab/target/ directory. `environment.account`/`environment.network` are
+# omitted entirely — genuinely absent, not defaulted to a fake value, per
+# host/src/scope.rs's Option<Account>/Option<Network> fields.
+#
+# Path containment is real and enforced: `host::evaluate` checks any
+# attempted path against the declared `[[environment.targets]]` entries
+# below (canonicalized, symlink-safe, via the same primitive `gate-pipeline`
+# uses for the harness gate) and denies anything that resolves outside them
+# — see host/src/broker.rs. What's still NOT real: `research_agent::Technique`
+# carries no per-technique path, so `lab-agents::attempt_all` checks every
+# attempt against this scope's declared target as a whole, not a specific
+# per-technique file; and there is still no wasmtime/WASI-P2 execution
+# engine, so a granted, path-clean technique still doesn't actually run —
+# see lab-agents' attacker.rs doc comment for that separate, disclosed gap.
 
 [environment]
 # Human-readable name for this lab environment, used in audit log entries.
-name = "example-lab"
+name = "codespace-local-lab"
 
-# Cloud/account identifiers the lab is confined to. Format depends on
-# provider; declare only what you own and control.
-[environment.account]
-provider = "aws"                 # e.g. "aws", "azure", "gcp", "on-prem"
-account_id = "000000000000"      # placeholder — replace with a real, owned account ID
-region = "us-east-1"
+# No [environment.account] or [environment.network] -- this lab has no
+# cloud account and no VPC. Both are genuinely absent, not faked.
 
-# Network boundary the lab may operate within.
-[environment.network]
-vpc_id = "vpc-00000000"
-allowed_cidrs = ["10.42.0.0/24"]
-
-# Specific hosts/resources in scope, identified explicitly. No wildcards —
-# every reachable target must be enumerated here individually.
+# The only real target: a directory inside this Codespace's own ephemeral
+# container filesystem, not an external resource of any kind. Real
+# containment: host::evaluate denies any attempted path outside this
+# directory (see host/src/broker.rs's local-directory target check).
 [[environment.targets]]
-id = "target-001"
-type = "ec2-instance"             # e.g. "ec2-instance", "container", "vm"
-identifier = "i-0000000000000000" # placeholder — replace with a real, owned resource ID
-description = "Example placeholder target — replace before use."
+id = "lab-target-local"
+type = "local-directory"
+identifier = "lab/target"
+description = "The Codespace's own ephemeral container filesystem, scoped to this one repo-local directory. Not a cloud resource, not shared with any other environment, destroyed whenever this Codespace is."
 
 # -----------------------------------------------------------------------------
 # Allowed technique categories
@@ -46,17 +51,15 @@ description = "Example placeholder target — replace before use."
 
 [techniques]
 allowed_categories = [
-    "T1059", # Command and Scripting Interpreter (example)
-    "T1078", # Valid Accounts (example)
+    "T1059", # Command and Scripting Interpreter -- already ingested from
+             # Atomic Red Team, genuinely testable against a local
+             # filesystem/process target, no cloud resource required.
 ]
 
 # Explicit source allowlist for technique ingestion (see CONTEXT.md, section 4).
 # research-agent must reject anything not drawn from these sources.
 allowed_sources = [
-    "mitre-attack",
-    "cve-nvd",
     "atomic-red-team",
-    "sigma",
 ]
 
 # -----------------------------------------------------------------------------
@@ -68,19 +71,14 @@ allowed_sources = [
 
 [exclusions]
 technique_categories = [
-    "T1499", # Endpoint Denial of Service — excluded (example)
+    "T1078", # Valid Accounts -- needs a real account/IAM system to mean
+             # anything; excluded on principle, not just "not yet added".
+    "T1499", # Endpoint Denial of Service -- unsafe regardless of
+             # environment, excluded on principle.
 ]
-targets = [
-    "i-9999999999999999", # excluded resource — replace/remove (example)
-]
-notes = "Populate with anything explicitly out of bounds, even if technically reachable."
+notes = "Only lab/target/ is in scope for any file or command operation -- enforced structurally by host::evaluate's path check, not just documented here. No real network egress beyond what the Codespace itself already needs (crates.io, github.com) is part of this lab's granted capabilities. Any technique category that would require real cloud resources (IAM, account services, VPC-level controls, etc.) to mean anything stays excluded regardless of whether it's explicitly listed above -- this scope only ever grants what a bare, disposable container can honestly provide."
 
-# -----------------------------------------------------------------------------
-# Validity window (optional)
-# -----------------------------------------------------------------------------
-# If set, capability grants derived from this file are only valid between
-# these timestamps. Leave unset for an open-ended scope.
-
-[validity]
-starts_at = "2026-01-01T00:00:00Z"
-ends_at = "2026-01-08T00:00:00Z"
+# No [validity] table -- omitted entirely, not commented out. Per
+# host/src/scope.rs's ScopeConfig::is_temporally_valid, an absent
+# [validity] table deserializes to None, meaning "always valid, no time
+# restriction" -- confirmed in code, not assumed.

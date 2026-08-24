@@ -2,3 +2,8 @@
 **/*.rs.bk
 *.pdb
 /.audit
+
+# lab-agent file operations write here at runtime; only the explanatory
+# README is tracked, not whatever a real run produces.
+lab/target/*
+!lab/target/README.md

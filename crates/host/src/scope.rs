@@ -21,8 +21,16 @@ pub struct ScopeConfig {
 #[derive(Debug, Clone, Deserialize)]
 pub struct Environment {
     pub name: String,
-    pub account: Account,
-    pub network: Network,
+    /// `None` when the environment has no cloud account at all (e.g. a
+    /// local/container-only lab target) — genuinely absent, not defaulted
+    /// to a fake or empty account. `host::evaluate` has never read this
+    /// field for any capability decision; it exists for documentation.
+    #[serde(default)]
+    pub account: Option<Account>,
+    /// Same absence semantics as `account` — `None` when there's no
+    /// network boundary to declare (e.g. no VPC for a local target).
+    #[serde(default)]
+    pub network: Option<Network>,
     #[serde(default)]
     pub targets: Vec<Target>,
 }

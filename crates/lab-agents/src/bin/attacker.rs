@@ -6,9 +6,10 @@ use host::{CapabilityDecision, ScopeConfig};
 
 fn main() -> anyhow::Result<()> {
     let scope = ScopeConfig::load("lab/scope.toml")?;
+    let workspace_root = std::env::current_dir()?;
     let store = AuditStore::open(".audit/store.redb")?;
 
-    let attempts = lab_agents::attempt_all(&scope, &store)?;
+    let attempts = lab_agents::attempt_all(&scope, &workspace_root, &store)?;
 
     for attempt in &attempts {
         match &attempt.decision {

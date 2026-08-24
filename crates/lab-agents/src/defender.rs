@@ -6,9 +6,11 @@ use chrono::Utc;
 /// agent reasoning — see CONTEXT.md section 1 ("Verdict authority").
 fn expected_signal(category: &str) -> &'static str {
     match category {
-        "T1059" => "a CapabilityGranted or CapabilityDenied event for a Command and Scripting Interpreter attempt",
-        "T1078" => "a CapabilityGranted or CapabilityDenied event for a Valid Accounts attempt",
-        _ => "a CapabilityGranted or CapabilityDenied event for this technique's attempt",
+        "T1059" => {
+            "a CapabilityGranted, CapabilityDenied, or ExecutionBlocked event for a Command and Scripting Interpreter attempt"
+        }
+        "T1078" => "a CapabilityGranted, CapabilityDenied, or ExecutionBlocked event for a Valid Accounts attempt",
+        _ => "a CapabilityGranted, CapabilityDenied, or ExecutionBlocked event for this technique's attempt",
     }
 }
 
@@ -22,12 +24,20 @@ pub struct DetectionResult {
 }
 
 /// For every queued technique, checks whether the expected capability-
-/// decision signal was logged. Note on what this currently proves: since
-/// every attempt this session was denied before execution (see
-/// attacker.rs), a "present" result here means "the denial itself was
-/// observably logged" — not "a real intrusion attempt was detected". The
-/// two only become distinguishable once `lab/scope.toml` grants real
-/// capabilities and executions can actually proceed.
+/// decision signal was logged.
+///
+/// The matcher recognizes `ExecutionBlocked` alongside
+/// `CapabilityGranted`/`CapabilityDenied`, found while preparing to
+/// populate a real `lab/scope.toml` for the first time: once a technique
+/// is genuinely granted but still blocked at the execution stage (no
+/// wasmtime/WASI-P2 engine exists yet — see attacker.rs's doc comment),
+/// the old matcher would have incorrectly reported `signal_present: false`
+/// for a technique that genuinely was attempted. `signal_present` means
+/// "the attempt was observably logged" — granted-but-blocked, denied
+/// outright, whichever — not "a real intrusion attempt was detected".
+/// Those two only become distinguishable once an execution engine exists
+/// and a `DetectionChecked` event can reference something that actually
+/// ran.
 pub fn check_all(store: &AuditStore) -> anyhow::Result<Vec<DetectionResult>> {
     let events = store.events()?;
     let queued: Vec<(String, research_agent::Technique)> = store.techniques()?;
@@ -39,7 +49,7 @@ pub fn check_all(store: &AuditStore) -> anyhow::Result<Vec<DetectionResult>> {
             .rev()
             .find(|e| {
                 e.subject_id == technique.id
-                    && matches!(e.kind, EventKind::CapabilityGranted | EventKind::CapabilityDenied)
+                    && matches!(e.kind, EventKind::CapabilityGranted | EventKind::CapabilityDenied | EventKind::ExecutionBlocked)
             })
             .cloned();
 
@@ -84,24 +94,29 @@ mod tests {
         }
     }
 
-    /// Against the real (denied) audit log produced by Step 2's attacker
-    /// run, the defender must report the signal present and reference the
-    /// actual CapabilityDenied event — never a CapabilityGranted one, since
-    /// nothing can be granted under the current scope.
+    /// Against the real (now-populated) `lab/scope.toml`, T1059 is granted
+    /// but still has no execution engine to actually run it — the defender
+    /// must still report the signal present, referencing the real
+    /// `ExecutionBlocked` event, proving `check_all`'s matcher recognizes a
+    /// granted-but-blocked attempt as a genuine signal, not just an
+    /// outright denial. Before Step 2a/2b's path enforcement and populated
+    /// scope, this technique was denied outright instead; this test's
+    /// name and assertion changed to match that real, verified shift, not
+    /// a guess about what would happen.
     #[test]
-    fn reports_present_and_references_the_real_capability_denied_event() {
+    fn reports_present_and_references_the_real_execution_blocked_event() {
         let scope = ScopeConfig::load("../../lab/scope.toml").expect("lab/scope.toml should parse");
         let dir = tempfile::tempdir().unwrap();
         let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
         store.put_technique("test-guid-1", &fake_technique("T1059", "test-guid-1")).unwrap();
 
-        crate::attacker::attempt_all(&scope, &store).unwrap();
+        crate::attacker::attempt_all(&scope, std::path::Path::new("../.."), &store).unwrap();
         let results = check_all(&store).unwrap();
 
         assert_eq!(results.len(), 1);
         assert!(results[0].signal_present);
         let referenced = results[0].referenced_event.as_ref().expect("signal_present implies a referenced event");
-        assert_eq!(referenced.kind, EventKind::CapabilityDenied);
+        assert_eq!(referenced.kind, EventKind::ExecutionBlocked);
     }
 
     /// A technique that was queued but never attempted (no capability

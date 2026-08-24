@@ -100,10 +100,16 @@ mod tests {
         }
     }
 
-    /// End-to-end over the real Step 2/3 pipeline against the real
-    /// `lab/scope.toml`: the technique must verify as `Blocked`, with a
-    /// reason that traces back to the actual denial (the expired validity
-    /// window), not a generic placeholder string.
+    /// End-to-end over the real pipeline against the real, now-populated
+    /// `lab/scope.toml`: the technique must still verify as `Blocked`, but
+    /// for a different, real reason than before. `lab/scope.toml` now
+    /// genuinely grants T1059 (Step 2a/2b's path enforcement), so the
+    /// technique is no longer denied by scope — it's blocked at the
+    /// execution stage instead, since `lab-agents` still has no
+    /// wasmtime/WASI-P2 execution engine. Path enforcement and execution
+    /// capability are separate gaps; this test's reason-string assertion
+    /// changed from the old expired-validity-window text to this new,
+    /// verified-real one, not the other way around.
     #[test]
     fn real_pipeline_run_yields_blocked_with_a_traceable_reason() {
         let scope = ScopeConfig::load("../../lab/scope.toml").expect("lab/scope.toml should parse");
@@ -111,7 +117,7 @@ mod tests {
         let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
         store.put_technique("test-guid-1", &fake_technique("T1059", "test-guid-1")).unwrap();
 
-        lab_agents::attempt_all(&scope, &store).unwrap();
+        lab_agents::attempt_all(&scope, std::path::Path::new("../.."), &store).unwrap();
         lab_agents::check_all(&store).unwrap();
 
         let records = verify(&store).unwrap();
@@ -120,8 +126,8 @@ mod tests {
         match &records[0].verdict {
             Verdict::Blocked { reason } => {
                 assert!(
-                    reason.contains("validity window"),
-                    "expected the verdict's reason to trace back to the expired validity window, got: {reason}"
+                    reason.contains("no wasmtime/WASI-P2 sandbox execution path implemented"),
+                    "expected the verdict's reason to trace back to the missing execution engine, not scope denial, got: {reason}"
                 );
             }
             other => panic!("expected Blocked, got {other:?}"),

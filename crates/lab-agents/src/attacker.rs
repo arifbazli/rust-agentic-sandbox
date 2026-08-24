@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use audit::{AuditEvent, AuditStore, EventKind};
 use chrono::Utc;
 use host::{evaluate, CapabilityDecision, ScopeConfig};
@@ -18,13 +20,24 @@ pub struct AttackAttempt {
 /// why that's a deliberate, disclosed gap rather than an oversight. Every
 /// attempt (granted or denied) is logged via `audit`, matching CONTEXT.md
 /// section 5.
-pub fn attempt_all(scope: &ScopeConfig, store: &AuditStore) -> anyhow::Result<Vec<AttackAttempt>> {
+///
+/// Every attempt is checked against the same declared local-directory
+/// target, if `scope` declares one — this v1 has no per-technique target
+/// path (`research_agent::Technique` carries none), so every attempt is
+/// understood to operate on the lab's own declared target directory as a
+/// whole, resolved relative to `workspace_root`. No declared local-directory
+/// target at all means no path is checked (unchanged, category-only
+/// behavior), matching every scope from before this path check existed.
+pub fn attempt_all(scope: &ScopeConfig, workspace_root: &Path, store: &AuditStore) -> anyhow::Result<Vec<AttackAttempt>> {
     let queued: Vec<(String, Technique)> = store.techniques()?;
     let mut attempts = Vec::with_capacity(queued.len());
 
+    let target_path =
+        scope.environment.targets.iter().find(|t| t.kind == "local-directory").map(|t| workspace_root.join(&t.identifier));
+
     for (guid, technique) in queued {
         let now = Utc::now();
-        let decision = evaluate(scope, &technique.id, now);
+        let decision = evaluate(scope, &technique.id, workspace_root, target_path.as_deref(), now);
 
         let (kind, detail) = match &decision {
             CapabilityDecision::Granted => (
@@ -69,35 +82,40 @@ mod tests {
         }
     }
 
-    /// Against the real (expired, placeholder) `lab/scope.toml`, every
-    /// attempt must be denied, fully logged, and never reach an
-    /// execution branch — see CONTEXT.md sections 2, 3, and 5.
+    /// `lab/scope.toml` is no longer a permanent-deny placeholder — it now
+    /// genuinely grants T1059 (real path enforcement, Step 2a/2b). This
+    /// test used to prove every attempt was denied outright; it now proves
+    /// the opposite half of the real behavior: granted, fully logged, but
+    /// still never actually executed, since there is no wasmtime/WASI-P2
+    /// execution engine yet (see this module's doc comment). Path
+    /// enforcement and execution capability are separate gaps — this test
+    /// exercises the first being real without implying the second is.
     #[test]
-    fn every_attempt_against_real_scope_is_denied_and_fully_logged() {
+    fn every_attempt_against_real_scope_is_granted_but_blocked_at_execution() {
         let scope = ScopeConfig::load("../../lab/scope.toml").expect("lab/scope.toml should parse");
         let dir = tempfile::tempdir().unwrap();
         let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
 
         store.put_technique("test-guid-1", &fake_technique("T1059", "test-guid-1")).unwrap();
 
-        let attempts = attempt_all(&scope, &store).unwrap();
+        let attempts = attempt_all(&scope, Path::new("../.."), &store).unwrap();
 
         assert_eq!(attempts.len(), 1);
-        assert!(
-            matches!(attempts[0].decision, CapabilityDecision::Denied { .. }),
-            "expected Denied under the current expired/placeholder scope, got {:?}",
+        assert_eq!(
+            attempts[0].decision,
+            CapabilityDecision::Granted,
+            "expected Granted under the real, populated lab/scope.toml, got {:?}",
             attempts[0].decision
         );
 
         let events = store.events().unwrap();
         assert_eq!(events.len(), 1, "every attempt must produce exactly one logged event");
-        assert_eq!(events[0].kind, EventKind::CapabilityDenied);
+        assert_eq!(events[0].kind, EventKind::ExecutionBlocked);
         assert_eq!(events[0].subject_id, "T1059");
-
-        let reached_execution = events
-            .iter()
-            .any(|e| matches!(e.kind, EventKind::ExecutionAttempted | EventKind::ExecutionBlocked | EventKind::CapabilityGranted));
-        assert!(!reached_execution, "no execution branch should be reachable under a denying scope");
+        assert!(
+            events[0].detail.contains("NOT run"),
+            "granted must still not execute, since there is no execution engine yet"
+        );
     }
 
     /// A capability grant is not enough to execute a technique in this v1
@@ -109,12 +127,6 @@ mod tests {
         let scope_toml = r#"
             [environment]
             name = "test-lab"
-            [environment.account]
-            provider = "aws"
-            account_id = "111111111111"
-            region = "us-east-1"
-            [environment.network]
-            vpc_id = "vpc-test"
             [techniques]
             allowed_categories = ["T1059"]
             allowed_sources = ["atomic-red-team"]
@@ -124,7 +136,7 @@ mod tests {
         let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
         store.put_technique("test-guid-2", &fake_technique("T1059", "test-guid-2")).unwrap();
 
-        let attempts = attempt_all(&scope, &store).unwrap();
+        let attempts = attempt_all(&scope, Path::new("."), &store).unwrap();
 
         assert_eq!(attempts[0].decision, CapabilityDecision::Granted);
         let events = store.events().unwrap();
