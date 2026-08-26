@@ -11,6 +11,18 @@ yet cut a release.
 
 ### 2026-08-26
 
+- Re-investigated Copilot CLI's `create`/`edit` schema gap, wider than
+  the prior two checks: confirmed `toolArgs` is explicitly typed
+  `unknown` in GitHub's own `hooks-reference` TypeScript types — a
+  stronger fact than "undocumented"; found that page's Claude-tool-name
+  compatibility table maps `create` to `Write` (a name mapping, not a
+  schema); confirmed `github/copilot-cli` itself contains no
+  application source, only distribution/issue-tracker files; and found
+  issue [copilot-cli#3349](https://github.com/github/copilot-cli/issues/3349)
+  confirming this ambiguity is an acknowledged upstream gap. Conclusion
+  unchanged — still not fixable — but the disclosure in
+  `adapter-copilot-cli` and README is now dated and cites this stronger
+  evidence instead of carrying the prior check forward unverified.
 - **Added** `edit` gating for `adapter-claude-code`: reconstructs the
   full resulting file content by reading the target file and applying
   Claude Code's confirmed `old_string`/`new_string`/`replace_all`

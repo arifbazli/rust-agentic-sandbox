@@ -22,7 +22,7 @@ flowchart TB
 
 Both halves (harness gate, attack/defend lab) are wired end-to-end; no stub crates remain. `edit` is now gated for `adapter-claude-code` and `adapter-pi`, each reconstructing full file content from its harness's real (and genuinely different) diff schema.
 
-**Known gaps:** Copilot CLI gates neither `edit` nor `create` — no documented schema exists for either, and unlike Pi there's no source repo to check instead; and no command-execution sandbox exists for `lab-agents::attacker` — `lab/scope.toml` grants T1059 for real, but nothing executes yet, so `verifier` only ever produces `Blocked`, never `Detected`/`Missed`.
+**Known gaps:** Copilot CLI gates neither `edit` nor `create` — re-investigated 2026-08-26: GitHub's own hooks reference types `toolArgs` as `unknown`, and [copilot-cli#3349](https://github.com/github/copilot-cli/issues/3349) confirms the ambiguity is an acknowledged upstream gap, not just unfound; still no source repo to check instead, unlike Pi. And no command-execution sandbox exists for `lab-agents::attacker` — `lab/scope.toml` grants T1059 for real, but nothing executes yet, so `verifier` only ever produces `Blocked`, never `Detected`/`Missed`.
 
 Full policy: [CONTEXT.md](./CONTEXT.md). Full history: [CHANGELOG.md](./CHANGELOG.md).
 

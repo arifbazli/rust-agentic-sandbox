@@ -74,16 +74,41 @@ fn resolve_tool_args(tool_args: &serde_json::Value) -> anyhow::Result<serde_json
 /// Only `bash` is handled — its `command` field is confirmed by the
 /// hooks reference's own "test it locally" sample. `create` (Copilot
 /// CLI's file-write tool) and `edit` both have NO documented `toolArgs`
-/// schema anywhere in the current reference — re-checked directly
-/// against https://docs.github.com/en/copilot/reference/hooks-reference
-/// and https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/allowing-tools
-/// for this work (not carried over from an earlier session's audit
-/// unchecked): no sample payload, no field-name list, and — unlike Pi —
-/// there's no public source repo to read a real schema from instead,
-/// since Copilot CLI is closed-source. So both stay ungated, a disclosed
-/// gap rather than a guessed shape. `edit` and every other tool name
-/// fall through to `Ok(None)` for the same reason. See CONTEXT.md
-/// section 7.
+/// schema anywhere in the current reference.
+///
+/// Re-investigated 2026-08-26, wider than the prior two checks: the
+/// full docs hub, the hooks conceptual page, `hooks-reference`,
+/// `allowing-tools`, the `using-copilot-cli` overview,
+/// `configure-copilot-cli`, the sandboxes page, and the "Agent Plugins
+/// 1.0" changelog entry — none document `create`'s fields. Two things
+/// this pass found that the earlier checks didn't:
+///   - `hooks-reference`'s own TypeScript types declare `toolArgs` (and
+///     its snake_case alias `tool_input`) as `unknown` — a stronger
+///     fact than "undocumented": GitHub's own reference deliberately
+///     leaves it untyped, not merely silent on it.
+///   - That same page's Claude-tool-name compatibility table maps
+///     `create` -> `Write` and `edit`/`str_replace_editor`/`apply_patch`
+///     -> `Edit`. Useful context on how the hook layer is structured,
+///     but it's a *name* mapping, not an argument schema — no field
+///     names surface anywhere in it.
+/// `github/copilot-cli` (a real, public, 11k+-star repo) was checked
+/// directly this round — its contents are only `.github/`,
+/// `LICENSE.md`, `README.md`, `changelog.md`, `install.sh`: a
+/// distribution/issue-tracker repo, not a source repo, confirming (not
+/// overturning) that there's no public source to read a real schema
+/// from instead, unlike Pi. Its issue tracker was searched: issue
+/// https://github.com/github/copilot-cli/issues/3349 ("Document safe
+/// parsing for preToolUse.toolArgs when it is a JSON-encoded string")
+/// confirms this ambiguity is an acknowledged upstream gap, not just
+/// something this project failed to find.
+/// Not attempted this round: dumping the real payload from a live
+/// `create` call via an actual local Copilot CLI install — none was
+/// available in this environment. That's a genuine limitation of this
+/// investigation, not a closed door on a future one.
+///
+/// So both `create` and `edit` stay ungated — a disclosed gap rather
+/// than a guessed shape. `edit` and every other tool name fall through
+/// to `Ok(None)` for the same reason. See CONTEXT.md section 7.
 pub fn to_proposal(input: &HookInput) -> anyhow::Result<Option<Proposal>> {
     match input.tool_name.as_str() {
         "bash" => {
