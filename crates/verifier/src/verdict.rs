@@ -21,13 +21,17 @@ pub struct VerdictRecord {
 /// Pure deterministic verdict computation over the audit log — no model
 /// call anywhere in this function. See CONTEXT.md section 1.
 ///
-/// A capability denial, or a grant with no execution path implemented
-/// (see `lab-agents`'s crate docs), both resolve to `Blocked`. `Detected`
-/// and `Missed` are only reachable once a technique is actually granted
-/// AND executed AND checked by the defender — none of which happens this
-/// session, since `host::evaluate` denies everything under the current
-/// `lab/scope.toml`. That branch is implemented for structural
-/// completeness, not because it fires today.
+/// A capability denial, an `ExecutionBlocked` (granted but no execution
+/// path implemented — see `lab-agents`'s crate docs), or an
+/// `ExecutionFailed` (a real execution attempt that didn't succeed) all
+/// resolve to `Blocked` — nothing real happened for a defense to have
+/// caught. `Detected`/`Missed` require a technique that was actually
+/// executed — either `CapabilityGranted` (the old, still-supported signal)
+/// or `ExecutionSucceeded` (the real execution engine — currently only the
+/// synthetic proving technique reaches this, see
+/// `research_agent::synthetic`) — AND checked by the defender.
+/// `Detected`/`Missed` are genuinely reachable today for that technique,
+/// no longer only structurally complete-but-unreachable.
 pub fn verify(store: &AuditStore) -> anyhow::Result<Vec<VerdictRecord>> {
     let events = store.events()?;
 
@@ -44,15 +48,17 @@ pub fn verify(store: &AuditStore) -> anyhow::Result<Vec<VerdictRecord>> {
 
         let denied = subject_events.iter().find(|e| e.kind == EventKind::CapabilityDenied);
         let blocked = subject_events.iter().find(|e| e.kind == EventKind::ExecutionBlocked);
-        let granted = subject_events.iter().find(|e| e.kind == EventKind::CapabilityGranted);
+        let execution_failed = subject_events.iter().find(|e| e.kind == EventKind::ExecutionFailed);
+        let executed = subject_events.iter().find(|e| matches!(e.kind, EventKind::CapabilityGranted | EventKind::ExecutionSucceeded));
         let detection_checked = subject_events.iter().rev().find(|e| e.kind == EventKind::DetectionChecked);
 
         let verdict = if let Some(event) = denied {
             Verdict::Blocked { reason: event.detail.clone() }
         } else if let Some(event) = blocked {
             Verdict::Blocked { reason: event.detail.clone() }
-        } else if granted.is_some() {
-            // Unreachable this session — see doc comment above.
+        } else if let Some(event) = execution_failed {
+            Verdict::Blocked { reason: event.detail.clone() }
+        } else if executed.is_some() {
             match detection_checked {
                 Some(event) if event.detail.contains("present: true") => Verdict::Detected,
                 Some(_) => Verdict::Missed,
@@ -118,7 +124,7 @@ mod tests {
         store.put_technique("test-guid-1", &fake_technique("T1059", "test-guid-1")).unwrap();
 
         lab_agents::attempt_all(&scope, std::path::Path::new("../.."), &store).unwrap();
-        lab_agents::check_all(&store).unwrap();
+        lab_agents::check_all(&scope, std::path::Path::new("../.."), &store).unwrap();
 
         let records = verify(&store).unwrap();
         assert_eq!(records.len(), 1);
@@ -134,11 +140,80 @@ mod tests {
         }
     }
 
+    fn scope_with_synthetic_target_toml() -> &'static str {
+        r#"
+            [environment]
+            name = "test-lab"
+            [[environment.targets]]
+            id = "t1"
+            type = "local-directory"
+            identifier = "target"
+            [techniques]
+            allowed_categories = ["SYNTH-0001"]
+            allowed_sources = ["synthetic-proving"]
+        "#
+    }
+
+    /// Fully real, end to end, zero fabricated events: the synthetic
+    /// proving technique actually executes (real wasmtime sandbox, real
+    /// marker write), the real defender finds the marker genuinely on
+    /// disk, and `verify()` must classify this as `Detected` — the first
+    /// time in this project's history this verdict is reachable through
+    /// the real pipeline rather than only a hand-built fixture.
+    #[test]
+    fn real_synthetic_pipeline_with_marker_on_disk_yields_detected() {
+        let scope: ScopeConfig = toml::from_str(scope_with_synthetic_target_toml()).unwrap();
+        let workspace = tempfile::tempdir().unwrap();
+        std::fs::create_dir(workspace.path().join("target")).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
+
+        let technique = research_agent::synthetic_proving_technique();
+        store.put_technique(&technique.guid, &technique).unwrap();
+
+        lab_agents::attempt_all(&scope, workspace.path(), &store).unwrap();
+        lab_agents::check_all(&scope, workspace.path(), &store).unwrap();
+
+        let records = verify(&store).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].technique_id, "SYNTH-0001");
+        assert_eq!(records[0].verdict, Verdict::Detected);
+    }
+
+    /// Fully real, end to end, zero fabricated events: the synthetic
+    /// technique actually executes for real, then the marker file is
+    /// genuinely deleted from disk before the real defender check runs —
+    /// `verify()` must classify this as `Missed`, proving the path is
+    /// really reachable, not just theoretically wired.
+    #[test]
+    fn real_synthetic_pipeline_with_marker_removed_yields_missed() {
+        let scope: ScopeConfig = toml::from_str(scope_with_synthetic_target_toml()).unwrap();
+        let workspace = tempfile::tempdir().unwrap();
+        let target_dir = workspace.path().join("target");
+        std::fs::create_dir(&target_dir).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
+
+        let technique = research_agent::synthetic_proving_technique();
+        store.put_technique(&technique.guid, &technique).unwrap();
+
+        lab_agents::attempt_all(&scope, workspace.path(), &store).unwrap();
+        std::fs::remove_file(target_dir.join(lab_agents::MARKER_FILE_NAME)).unwrap();
+        lab_agents::check_all(&scope, workspace.path(), &store).unwrap();
+
+        let records = verify(&store).unwrap();
+        assert_eq!(records.len(), 1);
+        assert_eq!(records[0].technique_id, "SYNTH-0001");
+        assert_eq!(records[0].verdict, Verdict::Missed);
+    }
+
     /// Synthetic fixture: a capability grant followed by a detection check
     /// that found the signal present must classify as `Detected`. This
-    /// path is unreachable via real execution today (the scope denies
-    /// everything), but the classification logic itself must still be
-    /// correct — otherwise a future bug here would go unnoticed.
+    /// specific event combination (a bare `CapabilityGranted`, with no
+    /// `ExecutionSucceeded`) is not produced by any real code path in the
+    /// lab loop today, but the classification logic must still handle it
+    /// correctly — this is a distinct case from the real pipeline test
+    /// above, not a duplicate of it.
     #[test]
     fn synthetic_grant_with_signal_present_yields_detected() {
         let dir = tempfile::tempdir().unwrap();
@@ -171,7 +246,9 @@ mod tests {
     /// Synthetic fixture: a capability grant followed by a detection check
     /// that did NOT find the signal must classify as `Missed` — proving
     /// Detected and Missed are genuinely distinguishable, not both
-    /// aliases for the same fallthrough.
+    /// aliases for the same fallthrough. Distinct from the real-pipeline
+    /// test above: this exercises the bare `CapabilityGranted` event kind
+    /// directly, not `ExecutionSucceeded`.
     #[test]
     fn synthetic_grant_with_signal_absent_yields_missed() {
         let dir = tempfile::tempdir().unwrap();
