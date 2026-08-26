@@ -18,11 +18,11 @@ flowchart TB
     AUDIT --> VER{{verifier}}
 ```
 
-## Status — 78/78 tests passing
+## Status — 88/88 tests passing
 
-Both halves (harness gate, attack/defend lab) are wired end-to-end; no stub crates remain.
+Both halves (harness gate, attack/defend lab) are wired end-to-end; no stub crates remain. `edit` is now gated for `adapter-claude-code` and `adapter-pi`, each reconstructing full file content from its harness's real (and genuinely different) diff schema.
 
-**Known gaps:** no adapter gates `edit` (undocumented schema on every harness); Copilot CLI's `create` tool has no documented schema at all, so that adapter never reaches the sandbox dry-run stage; and no command-execution sandbox exists for `lab-agents::attacker` — `lab/scope.toml` now grants T1059 for real, but nothing executes yet, so `verifier` only ever produces `Blocked`, never `Detected`/`Missed`.
+**Known gaps:** Copilot CLI gates neither `edit` nor `create` — no documented schema exists for either, and unlike Pi there's no source repo to check instead; and no command-execution sandbox exists for `lab-agents::attacker` — `lab/scope.toml` grants T1059 for real, but nothing executes yet, so `verifier` only ever produces `Blocked`, never `Detected`/`Missed`.
 
 Full policy: [CONTEXT.md](./CONTEXT.md). Full history: [CHANGELOG.md](./CHANGELOG.md).
 
