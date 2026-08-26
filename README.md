@@ -18,11 +18,11 @@ flowchart TB
     AUDIT --> VER{{verifier}}
 ```
 
-## Status — 88/88 tests passing
+## Status — 98/98 tests passing
 
-Both halves (harness gate, attack/defend lab) are wired end-to-end; no stub crates remain. `edit` is now gated for `adapter-claude-code` and `adapter-pi`, each reconstructing full file content from its harness's real (and genuinely different) diff schema.
+Both halves (harness gate, attack/defend lab) are wired end-to-end; no stub crates remain. `edit` is gated for `adapter-claude-code` and `adapter-pi`, each reconstructing full file content from its harness's real (and genuinely different) diff schema. A real `wasmtime`/WASI-Preview-1 execution engine now exists for `lab-agents::attacker` — `verifier` can genuinely produce `Detected`/`Missed`, not just `Blocked`, for the first time — but only for a synthetic, self-authored proving technique built to prove the mechanism works end to end, not for real Atomic Red Team execution.
 
-**Known gaps:** Copilot CLI gates neither `edit` nor `create` — re-investigated 2026-08-26: GitHub's own hooks reference types `toolArgs` as `unknown`, and [copilot-cli#3349](https://github.com/github/copilot-cli/issues/3349) confirms the ambiguity is an acknowledged upstream gap, not just unfound; still no source repo to check instead, unlike Pi. And no command-execution sandbox exists for `lab-agents::attacker` — `lab/scope.toml` grants T1059 for real, but nothing executes yet, so `verifier` only ever produces `Blocked`, never `Detected`/`Missed`.
+**Known gaps:** Copilot CLI gates neither `edit` nor `create` — re-investigated 2026-08-26: GitHub's own hooks reference types `toolArgs` as `unknown`, and [copilot-cli#3349](https://github.com/github/copilot-cli/issues/3349) confirms the ambiguity is an acknowledged upstream gap, not just unfound; still no source repo to check instead, unlike Pi. And no execution path exists for real techniques — T1059 still produces `Blocked`, unchanged; closing that is an open policy question (an OS-level sandboxed subprocess vs. staying wasmtime/WASI-only), not yet decided — see [DESIGN-execution-engine.md](./DESIGN-execution-engine.md).
 
 Full policy: [CONTEXT.md](./CONTEXT.md). Full history: [CHANGELOG.md](./CHANGELOG.md).
 

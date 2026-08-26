@@ -26,7 +26,7 @@ LLMs may **summarize or explain** a verdict after it is produced. They may never
 
 ## 2. Capability-default-deny
 
-Every sandbox instance (`wasmtime`/WASI-Preview-2) starts with zero capabilities. No filesystem access, no network access, no environment variables, no host function imports — nothing — until `host` explicitly grants each one for that specific run.
+Every sandbox instance (`wasmtime`/WASI-Preview-1) starts with zero capabilities. No filesystem access, no network access, no environment variables, no host function imports — nothing — until `host` explicitly grants each one for that specific run.
 
 Grants are scoped to the minimum needed for the proposal or technique under evaluation, and are never broadened "just in case." A capability not explicitly granted is denied; there is no implicit or inherited access.
 

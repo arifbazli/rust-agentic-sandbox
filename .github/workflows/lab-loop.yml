@@ -8,11 +8,20 @@ name: Scheduled lab loop
 on:
   schedule:
     # Daily, off the top of the hour to avoid GitHub's peak scheduling
-    # load. The lab currently exercises one static technique category
-    # (T1059) with no real command-execution sandbox yet, so every run
-    # is expected to end in an honest `Blocked` verdict (see README's
-    # "Known gaps") -- this schedule exists to catch regressions (a
-    # broken upstream fetch, a dependency bump that breaks the chain),
+    # load. This workflow's ingest step only ever queues real,
+    # ingested-from-source techniques (currently just T1059) -- the
+    # synthetic proving technique (research_agent::synthetic) that the
+    # real wasmtime/WASI execution engine actually serves deliberately
+    # never goes through real ingestion, and nothing here seeds it. So
+    # every scheduled run is still expected to end in an honest `Blocked`
+    # verdict for T1059 (see README's "Known gaps"), not because no
+    # execution engine exists at all anymore, but because this specific
+    # workflow never exercises the one technique that has one. The step
+    # summary logic below is generic (it tees each binary's real stdout,
+    # it never parses or branches on the verdict text), so it would
+    # render a Detected/Missed result correctly if this workflow's scope
+    # ever grew to cover one -- this schedule exists to catch regressions
+    # (a broken upstream fetch, a dependency bump that breaks the chain),
     # not to surface new findings. Daily is frequent enough to catch a
     # break within a day without generating hourly-repeated noise.
     - cron: '0 7 * * *'

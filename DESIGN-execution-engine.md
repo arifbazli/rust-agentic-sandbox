@@ -1,9 +1,27 @@
 # Design: a real execution engine for `lab-agents::attacker`
 
-**Status:** research + design proposal only. No code, no branch, no `Cargo.toml`
-changes. Written 2026-08-26 for technical-debt item 3/3 ("no wasmtime/WASI-P2
-sandbox execution path exists yet" — the last remaining disclosed gap in
-`README.md`'s known-gaps line and `lab-agents`' crate-level doc comment).
+**Status (updated 2026-08-26):** Option C is implemented and verified —
+see `lab_agents::sandbox`, `research_agent::synthetic_proving_technique`,
+and the 88 → 98 test delta. Both `Detected` and `Missed` are now reachable
+through the real, non-fabricated pipeline for the synthetic proving
+technique specifically. **Option B remains an open policy question** —
+real Atomic Red Team execution via an OS-level sandboxed subprocess,
+rather than wasmtime/WASI — not yet decided or scheduled; it needs its own
+CONTEXT.md section 2 conversation before any code gets written under that
+banner. Option A was not pursued, per section 4's reasoning below.
+Real Atomic Red Team techniques (T1059 included) are unaffected: they
+still log `ExecutionBlocked`, exactly as before.
+
+**Correction found during implementation:** this document (as originally
+written), `gate-pipeline::sandbox`'s doc comments, and CONTEXT.md section 2
+all said "WASI-Preview-2" / `wasm32-wasip2`. The real, proven pattern
+actually reused for Option C's guest module — and the one
+`gate-pipeline::sandbox` itself already used — is **WASI Preview 1**
+(`wasmtime-wasi`'s `p1` module, `wasm32-wasip1`), not the Preview
+2/Component-Model API. The sections below are left as the original
+research record rather than rewritten; where they say "WASI-Preview-2" or
+"wasm32-wasip2", read it as what was proposed pre-implementation, not what
+was actually built.
 
 Everything below rests on live verification done today (the ingested
 technique's real content, the current WASI proposal list, and

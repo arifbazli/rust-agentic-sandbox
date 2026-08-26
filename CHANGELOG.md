@@ -11,6 +11,45 @@ yet cut a release.
 
 ### 2026-08-26
 
+- Technical debt 3/3: designed and implemented a real execution engine for
+  the attack/defend lab, in two phases:
+  - **Design** (`DESIGN-execution-engine.md`): live-verified research —
+    WASI's own proposal list has no subprocess/exec capability at any
+    phase (0-5), and the one technique actually ingested today
+    (T1059/"AutoIt Script Execution") is 100% Windows PowerShell, not
+    bash — grounding 3 evaluated options: a WASI-compiled shell
+    interpreter (0% coverage of what's ingested today, since WASI has no
+    `fork`/`exec` to invoke external binaries), an OS-level sandboxed
+    subprocess (the only mechanism that could ever run real ART content,
+    but not wasmtime/WASI — left as an open CONTEXT.md policy question,
+    not a unilateral code change), and a synthetic self-authored proving
+    technique (recommended and implemented).
+  - **Implementation**: `research_agent::synthetic_proving_technique`
+    (`source: "synthetic-proving"`, deliberately kept outside the real
+    ingestion/allowlist path — never subject to
+    `ScopeConfig::allows_source`); a real `wasmtime`/WASI-Preview-1
+    execution engine (`lab_agents::sandbox`) that actually writes a fixed
+    marker file inside `lab/target/`; new `EventKind::ExecutionSucceeded`/
+    `ExecutionFailed`; `lab_agents::attacker` wired so only the synthetic
+    technique ever executes — every real technique (T1059 included) keeps
+    logging `ExecutionBlocked`, byte-for-byte unchanged (regression
+    tested); `defender::check_all` made content-aware for the synthetic
+    technique specifically — it checks the real marker file's on-disk
+    presence/content, not just "was an event logged", which is what makes
+    `Missed` genuinely reachable rather than only theoretically wired;
+    `verifier::verify` updated to recognize `ExecutionSucceeded`. Both
+    `Detected` and `Missed` are reachable through the real,
+    non-fabricated pipeline for the first time in this project's history.
+    88 → 98 tests.
+  - Also fixed during the regression pass: a real display bug in
+    `lab-agents`' `attacker` binary (it printed the same "no execution
+    path" message regardless of what actually happened — `AttackAttempt`
+    now carries the real logged outcome, not just the capability
+    decision); `lab-agents/src/lib.rs`'s stale doc comment (still
+    described `lab/scope.toml` as expired/unpopulated — true before PR
+    #16, not since); and a wording correction in `CONTEXT.md` section 2
+    and this crate's doc comment from "WASI-Preview-2" to
+    "WASI-Preview-1" (the real, proven implementation).
 - Re-investigated Copilot CLI's `create`/`edit` schema gap, wider than
   the prior two checks: confirmed `toolArgs` is explicitly typed
   `unknown` in GitHub's own `hooks-reference` TypeScript types — a
