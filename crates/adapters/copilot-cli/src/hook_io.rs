@@ -73,11 +73,15 @@ fn resolve_tool_args(tool_args: &serde_json::Value) -> anyhow::Result<serde_json
 ///
 /// Only `bash` is handled — its `command` field is confirmed by the
 /// hooks reference's own "test it locally" sample. `create` (Copilot
-/// CLI's file-write tool) has NO documented `toolArgs` schema anywhere
-/// in the current reference — no sample payload, no field-name list —
-/// so it isn't gated in this v1, a disclosed gap rather than a guessed
-/// `path`/`content` shape, matching the same treatment Claude Code's
-/// `Edit` got in `adapter-claude-code`. `edit` and every other tool name
+/// CLI's file-write tool) and `edit` both have NO documented `toolArgs`
+/// schema anywhere in the current reference — re-checked directly
+/// against https://docs.github.com/en/copilot/reference/hooks-reference
+/// and https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/allowing-tools
+/// for this work (not carried over from an earlier session's audit
+/// unchecked): no sample payload, no field-name list, and — unlike Pi —
+/// there's no public source repo to read a real schema from instead,
+/// since Copilot CLI is closed-source. So both stay ungated, a disclosed
+/// gap rather than a guessed shape. `edit` and every other tool name
 /// fall through to `Ok(None)` for the same reason. See CONTEXT.md
 /// section 7.
 pub fn to_proposal(input: &HookInput) -> anyhow::Result<Option<Proposal>> {

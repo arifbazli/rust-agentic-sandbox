@@ -80,18 +80,41 @@ impl HookOutput {
     }
 }
 
+/// Reconstructs the full resulting file content for an `Edit` proposal,
+/// mirroring Claude Code's own Edit tool contract exactly (confirmed
+/// against https://code.claude.com/docs/en/tools-reference, which quotes
+/// this behavior directly): `old_string` must be unique in
+/// `current_content` unless `replace_all` is set, or this errors rather
+/// than guessing which occurrence was meant.
+fn apply_edit(current_content: &str, old_string: &str, new_string: &str, replace_all: bool) -> anyhow::Result<String> {
+    if replace_all {
+        if !current_content.contains(old_string) {
+            return Err(anyhow::anyhow!("old_string not found in file"));
+        }
+        return Ok(current_content.replace(old_string, new_string));
+    }
+
+    match current_content.matches(old_string).count() {
+        0 => Err(anyhow::anyhow!("old_string not found in file")),
+        1 => Ok(current_content.replacen(old_string, new_string, 1)),
+        n => Err(anyhow::anyhow!("old_string appears {n} times in the file; ambiguous without replace_all")),
+    }
+}
+
 /// Translates a hook invocation into a `gate-pipeline` `Proposal`, for the
 /// tools this v1 actually gates.
 ///
-/// Only `Bash` (a direct `command` string) and `Write` (a direct
-/// `file_path` + full `content`) are handled — both confirmed against the
-/// current hooks reference. `Edit`'s `tool_input` carries an
-/// `old_string`/`new_string` diff against an existing file, not a full new
-/// file body; `Proposal::FileWrite` needs the whole intended content for
-/// the sandbox dry-run, and reconstructing that from a diff is real,
-/// separate work this v1 doesn't attempt. `Edit`, and every other tool,
-/// fall through to `Ok(None)` — a disclosed gap (passthrough-allow, never
-/// silently gated), not a guess. See CONTEXT.md section 7.
+/// `Bash` (a direct `command` string), `Write` (a direct `file_path` +
+/// full `content`), and `Edit` (`file_path` + `old_string`/`new_string`/
+/// `replace_all`) are all confirmed against the current hooks reference
+/// (code.claude.com/docs/en/hooks.md and its linked tools reference) —
+/// re-checked directly for this work, not assumed from an earlier
+/// session's audit. `Edit` reconstructs the resulting full file content
+/// by reading `file_path` from disk and applying the replacement via
+/// `apply_edit`, since `Proposal::FileWrite` needs whole intended content
+/// for the sandbox dry-run, not a diff. Every other tool name falls
+/// through to `Ok(None)` — a disclosed gap, not a guess. See CONTEXT.md
+/// section 7.
 pub fn to_proposal(input: &HookInput) -> anyhow::Result<Option<Proposal>> {
     match input.tool_name.as_str() {
         "Bash" => {
@@ -116,6 +139,30 @@ pub fn to_proposal(input: &HookInput) -> anyhow::Result<Option<Proposal>> {
                 .ok_or_else(|| anyhow::anyhow!("Write tool_input missing string field 'content'"))?
                 .to_string();
             Ok(Some(Proposal::FileWrite { path: PathBuf::from(file_path), content }))
+        }
+        "Edit" => {
+            let file_path = input
+                .tool_input
+                .get("file_path")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("Edit tool_input missing string field 'file_path'"))?;
+            let old_string = input
+                .tool_input
+                .get("old_string")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("Edit tool_input missing string field 'old_string'"))?;
+            let new_string = input
+                .tool_input
+                .get("new_string")
+                .and_then(|v| v.as_str())
+                .ok_or_else(|| anyhow::anyhow!("Edit tool_input missing string field 'new_string'"))?;
+            let replace_all = input.tool_input.get("replace_all").and_then(|v| v.as_bool()).unwrap_or(false);
+
+            let current_content = std::fs::read_to_string(file_path)
+                .map_err(|e| anyhow::anyhow!("failed to read '{file_path}' to reconstruct the Edit proposal: {e}"))?;
+            let new_content = apply_edit(&current_content, old_string, new_string, replace_all)?;
+
+            Ok(Some(Proposal::FileWrite { path: PathBuf::from(file_path), content: new_content }))
         }
         _ => Ok(None),
     }
@@ -159,15 +206,64 @@ mod tests {
     }
 
     #[test]
-    fn edit_tool_is_not_gated_in_this_v1() {
-        let input = input_with("Edit", serde_json::json!({ "file_path": "/workspace/out.txt", "old_string": "a", "new_string": "b" }));
-        let proposal = to_proposal(&input).unwrap();
-        assert!(proposal.is_none());
+    fn bash_missing_command_field_errors_instead_of_guessing() {
+        let input = input_with("Bash", serde_json::json!({}));
+        assert!(to_proposal(&input).is_err());
     }
 
     #[test]
-    fn bash_missing_command_field_errors_instead_of_guessing() {
-        let input = input_with("Bash", serde_json::json!({}));
+    fn edit_tool_input_reconstructs_full_resulting_content() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("out.txt");
+        std::fs::write(&file_path, "hello world").unwrap();
+        let input = input_with(
+            "Edit",
+            serde_json::json!({ "file_path": file_path.to_str().unwrap(), "old_string": "world", "new_string": "there" }),
+        );
+
+        let proposal = to_proposal(&input).unwrap();
+
+        match proposal {
+            Some(Proposal::FileWrite { path, content }) => {
+                assert_eq!(path, file_path);
+                assert_eq!(content, "hello there");
+            }
+            other => panic!("expected FileWrite, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn edit_with_replace_all_replaces_every_occurrence() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("out.txt");
+        std::fs::write(&file_path, "a a a").unwrap();
+        let input = input_with(
+            "Edit",
+            serde_json::json!({ "file_path": file_path.to_str().unwrap(), "old_string": "a", "new_string": "b", "replace_all": true }),
+        );
+
+        let proposal = to_proposal(&input).unwrap();
+
+        match proposal {
+            Some(Proposal::FileWrite { content, .. }) => assert_eq!(content, "b b b"),
+            other => panic!("expected FileWrite, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn edit_with_non_unique_old_string_and_no_replace_all_errors_instead_of_guessing() {
+        let dir = tempfile::tempdir().unwrap();
+        let file_path = dir.path().join("out.txt");
+        std::fs::write(&file_path, "a a").unwrap();
+        let input =
+            input_with("Edit", serde_json::json!({ "file_path": file_path.to_str().unwrap(), "old_string": "a", "new_string": "b" }));
+
+        assert!(to_proposal(&input).is_err());
+    }
+
+    #[test]
+    fn edit_missing_old_string_field_errors_instead_of_guessing() {
+        let input = input_with("Edit", serde_json::json!({ "file_path": "/workspace/out.txt", "new_string": "b" }));
         assert!(to_proposal(&input).is_err());
     }
 }

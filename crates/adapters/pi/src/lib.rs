@@ -24,8 +24,8 @@ use host::CapabilityDecision;
 
 /// Handles one intercepted `tool_call` event end to end.
 ///
-/// For a gated tool (`bash`/`write`, see `to_proposal`'s doc comment),
-/// runs the proposal through `gate_pipeline::review` (evidence) and
+/// For a gated tool (`bash`/`write`/`edit`, see `to_proposal`'s doc
+/// comment), runs the proposal through `gate_pipeline::review` (evidence) and
 /// `host::gate_verdict::evaluate` (verdict), tagged by the `subject_id`
 /// `review` generates. For every other tool, passes through as granted
 /// without invoking gate-pipeline at all — a disclosed v1 gap, not a
@@ -168,7 +168,7 @@ mod tests {
         assert!(!events.iter().any(|e| matches!(e.kind, EventKind::SandboxDryRunSucceeded | EventKind::SandboxDryRunDenied)));
     }
 
-    /// A tool this v1 doesn't gate (e.g. `edit`) must pass through as an
+    /// A tool this v1 doesn't gate (e.g. `view`) must pass through as an
     /// explicit, logged grant — never silently ungated.
     #[test]
     fn ungated_tool_passes_through_as_logged_grant() {
@@ -176,11 +176,63 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
 
-        let decision = handle_hook("edit", &serde_json::json!({ "path": "out.txt" }), workspace.path(), &store).unwrap();
+        let decision = handle_hook("view", &serde_json::json!({ "path": "out.txt" }), workspace.path(), &store).unwrap();
 
         assert!(decision.granted);
         let events = store.events().unwrap();
         assert!(events.iter().any(|e| e.kind == EventKind::Verdict && e.detail.contains("not yet gated")));
+    }
+
+    /// An `edit` proposal inside the workspace root must reach and
+    /// complete the real WASI sandbox dry-run stage — proving the
+    /// reconstructed full-file content actually drives gate-pipeline's
+    /// full pipeline. Same sandbox-stage-denial disclosure as the
+    /// `write` test above: unreachable through this call path for the
+    /// same structural reason.
+    #[test]
+    fn granted_edit_reaches_and_completes_the_sandbox_stage() {
+        let workspace = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
+        let file_path = workspace.path().join("out.txt");
+        std::fs::write(&file_path, "hello world").unwrap();
+
+        let decision = handle_hook(
+            "edit",
+            &serde_json::json!({ "path": file_path.to_str().unwrap(), "edits": [{ "oldText": "world", "newText": "there" }] }),
+            workspace.path(),
+            &store,
+        )
+        .unwrap();
+
+        assert_eq!(decision, BridgeDecision::granted("gate-pipeline granted this proposal"));
+        let events = store.events().unwrap();
+        assert!(events.iter().any(|e| e.kind == EventKind::SandboxDryRunSucceeded));
+        assert_eq!(std::fs::read_to_string(&file_path).unwrap(), "hello world", "a dry-run must never touch the real file");
+    }
+
+    /// An `edit` proposal targeting a file outside the workspace root
+    /// must be denied before the sandbox stage ever runs.
+    #[test]
+    fn edit_outside_workspace_is_denied_by_capability_check() {
+        let workspace = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
+        let file_path = outside.path().join("out.txt");
+        std::fs::write(&file_path, "hello world").unwrap();
+
+        let decision = handle_hook(
+            "edit",
+            &serde_json::json!({ "path": file_path.to_str().unwrap(), "edits": [{ "oldText": "world", "newText": "there" }] }),
+            workspace.path(),
+            &store,
+        )
+        .unwrap();
+
+        assert!(!decision.granted);
+        let events = store.events().unwrap();
+        assert!(!events.iter().any(|e| matches!(e.kind, EventKind::SandboxDryRunSucceeded | EventKind::SandboxDryRunDenied)));
     }
 
     #[test]

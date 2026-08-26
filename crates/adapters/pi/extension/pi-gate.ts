@@ -20,7 +20,7 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-const GATED_TOOLS = new Set(["bash", "write"]);
+const GATED_TOOLS = new Set(["bash", "write", "edit"]);
 
 export default function (pi: ExtensionAPI) {
 	const bridgeUrl = process.env.ADAPTER_PI_BRIDGE_URL ?? "http://127.0.0.1:8787/";
