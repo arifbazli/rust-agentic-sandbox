@@ -20,8 +20,8 @@ use host::CapabilityDecision;
 
 /// Handles one `PreToolUse` hook invocation end to end.
 ///
-/// For a gated tool (`Bash`/`Write`, see `to_proposal`'s doc comment), runs
-/// the proposal through `gate_pipeline::review` (evidence) and
+/// For a gated tool (`Bash`/`Write`/`Edit`, see `to_proposal`'s doc
+/// comment), runs the proposal through `gate_pipeline::review` (evidence) and
 /// `host::gate_verdict::evaluate` (verdict), tagged by the `subject_id`
 /// `review` generates. For every other tool, passes through as `allow`
 /// without invoking gate-pipeline at all — a disclosed v1 gap, not a
@@ -187,7 +187,7 @@ mod tests {
         assert!(!events.iter().any(|e| matches!(e.kind, EventKind::SandboxDryRunSucceeded | EventKind::SandboxDryRunDenied)));
     }
 
-    /// A tool this v1 doesn't gate (e.g. `Edit`) must pass through as an
+    /// A tool this v1 doesn't gate (e.g. `Read`) must pass through as an
     /// explicit, logged allow — never silently ungated and never crashing
     /// the hook.
     #[test]
@@ -195,17 +195,63 @@ mod tests {
         let workspace = tempfile::tempdir().unwrap();
         let dir = tempfile::tempdir().unwrap();
         let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
-        let input = input_with(
-            "Edit",
-            workspace.path().to_str().unwrap(),
-            serde_json::json!({ "file_path": "out.txt", "old_string": "a", "new_string": "b" }),
-        );
+        let input = input_with("Read", workspace.path().to_str().unwrap(), serde_json::json!({ "path": "out.txt" }));
 
         let output = handle_hook(&input, workspace.path(), &store).unwrap();
 
         assert!(!output.is_deny());
         let events = store.events().unwrap();
         assert!(events.iter().any(|e| e.kind == EventKind::Verdict && e.detail.contains("not yet gated")));
+    }
+
+    /// An `Edit` proposal inside the workspace root must reach and
+    /// complete the real WASI sandbox dry-run stage — proving the
+    /// reconstructed full-file content actually drives gate-pipeline's
+    /// full pipeline, not just a passthrough. Same sandbox-stage-denial
+    /// disclosure as the `Write` test above: unreachable through this
+    /// call path for the same structural reason.
+    #[test]
+    fn granted_edit_reaches_and_completes_the_sandbox_stage() {
+        let workspace = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
+        let file_path = workspace.path().join("out.txt");
+        std::fs::write(&file_path, "hello world").unwrap();
+        let input = input_with(
+            "Edit",
+            workspace.path().to_str().unwrap(),
+            serde_json::json!({ "file_path": file_path.to_str().unwrap(), "old_string": "world", "new_string": "there" }),
+        );
+
+        let output = handle_hook(&input, workspace.path(), &store).unwrap();
+
+        assert_eq!(output, HookOutput::allow("gate-pipeline granted this proposal"));
+        let events = store.events().unwrap();
+        assert!(events.iter().any(|e| e.kind == EventKind::SandboxDryRunSucceeded));
+        assert_eq!(std::fs::read_to_string(&file_path).unwrap(), "hello world", "a dry-run must never touch the real file");
+    }
+
+    /// An `Edit` proposal targeting a file outside the workspace root must
+    /// be denied before the sandbox stage ever runs.
+    #[test]
+    fn edit_outside_workspace_is_denied_by_capability_check() {
+        let workspace = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let store = AuditStore::open(dir.path().join("store.redb")).unwrap();
+        let file_path = outside.path().join("out.txt");
+        std::fs::write(&file_path, "hello world").unwrap();
+        let input = input_with(
+            "Edit",
+            workspace.path().to_str().unwrap(),
+            serde_json::json!({ "file_path": file_path.to_str().unwrap(), "old_string": "world", "new_string": "there" }),
+        );
+
+        let output = handle_hook(&input, workspace.path(), &store).unwrap();
+
+        assert!(output.is_deny());
+        let events = store.events().unwrap();
+        assert!(!events.iter().any(|e| matches!(e.kind, EventKind::SandboxDryRunSucceeded | EventKind::SandboxDryRunDenied)));
     }
 
     #[test]
