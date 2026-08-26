@@ -20,9 +20,11 @@ flowchart TB
 
 ## Status — 78/78 tests passing
 
-**Real, end-to-end, both halves for the first time:** `host`, `audit`, `research-agent`, `lab-agents`, `verifier`, `gate-pipeline` (deny-pattern static analysis + a real WASI sandbox dry-run), and all three harness adapters — no stub crates remain. The adapters differ in mechanism: `adapter-claude-code`/`adapter-copilot-cli` are one-shot stdin/stdout JSON hooks; `adapter-pi` is a persistent local HTTP bridge (`tiny_http`) paired with a reference-only TS extension, since Pi's extensions run in-process. `lab/scope.toml` is now real too, not a placeholder: a Codespace-contained scope with no cloud account, and `host::evaluate` genuinely returns `Granted` for T1059 via real, enforced path-containment.
+Both halves (harness gate, attack/defend lab) are wired end-to-end; no stub crates remain.
 
-**Known gaps:** no adapter gates `edit` yet (no harness documents a full-content schema for it); Copilot CLI's `create` tool has no documented schema at all, so that adapter never reaches the sandbox dry-run stage. The lab loop still only ever produces `Blocked` verdicts — no command-execution sandbox exists yet for `lab-agents::attacker`, so a granted, path-clean technique still doesn't actually run; `Detected`/`Missed` remain unreachable until that's built. Full policy: [CONTEXT.md](./CONTEXT.md).
+**Known gaps:** no adapter gates `edit` (undocumented schema on every harness); Copilot CLI's `create` tool has no documented schema at all, so that adapter never reaches the sandbox dry-run stage; and no command-execution sandbox exists for `lab-agents::attacker` — `lab/scope.toml` now grants T1059 for real, but nothing executes yet, so `verifier` only ever produces `Blocked`, never `Detected`/`Missed`.
+
+Full policy: [CONTEXT.md](./CONTEXT.md). Full history: [CHANGELOG.md](./CHANGELOG.md).
 
 ## Quickstart
 
