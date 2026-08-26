@@ -9,6 +9,28 @@ yet cut a release.
 
 ## [Unreleased]
 
+### 2026-08-26
+
+- **Added** `edit` gating for `adapter-claude-code`: reconstructs the
+  full resulting file content by reading the target file and applying
+  Claude Code's confirmed `old_string`/`new_string`/`replace_all`
+  replacement, mirroring Claude Code's own uniqueness contract exactly
+  — errors rather than guessing if `old_string` isn't unique and
+  `replace_all` isn't set (#19).
+- **Added** `edit` gating for `adapter-pi`: reconstructs full content
+  from Pi's confirmed `path` + `edits: [{oldText, newText}]` schema
+  (read straight from `src/core/tools/edit.ts`) — a genuinely different
+  shape from Claude Code's, not assumed to match it. Validates
+  uniqueness and non-overlap against the original file before applying
+  every replacement in one pass (#19).
+- Re-verified Copilot CLI's `edit` schema against its current docs —
+  still undocumented, and unlike Pi there's no source repo to check
+  instead since Copilot CLI is closed-source; stays an explicit,
+  disclosed passthrough gap, not carried over unchecked (#19).
+- Shortened README's Status section: one capability sentence, one
+  known-gaps sentence, links to both `CONTEXT.md` and `CHANGELOG.md`
+  (#18).
+
 ### 2026-08-24
 
 - **Added** real path-containment enforcement in `host::evaluate`: a
