@@ -1,0 +1,100 @@
+name: Scheduled lab loop
+
+# Runs the attack/defend lab end to end on a schedule: research-agent
+# ingest -> lab-agents attacker -> lab-agents defender -> verifier verify.
+# This is a scheduled report, not a PR gate -- do NOT add it to branch
+# protection's required status checks.
+
+on:
+  schedule:
+    # Daily, off the top of the hour to avoid GitHub's peak scheduling
+    # load. The lab currently exercises one static technique category
+    # (T1059) with no real command-execution sandbox yet, so every run
+    # is expected to end in an honest `Blocked` verdict (see README's
+    # "Known gaps") -- this schedule exists to catch regressions (a
+    # broken upstream fetch, a dependency bump that breaks the chain),
+    # not to surface new findings. Daily is frequent enough to catch a
+    # break within a day without generating hourly-repeated noise.
+    - cron: '0 7 * * *'
+  workflow_dispatch: {}
+
+env:
+  CARGO_TERM_COLOR: always
+
+defaults:
+  run:
+    # Explicit (rather than relying on the platform default) because
+    # only `shell: bash` enables pipefail; without it, a failing
+    # `cargo run` piped into `tee` would silently report success.
+    shell: bash
+
+jobs:
+  lab-loop:
+    name: research-agent -> attacker -> defender -> verifier
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # No wasm32-wasip1 target here (unlike ci.yml): none of
+      # research-agent/lab-agents/verifier/host depend on gate-pipeline,
+      # so its WASI dry-run guest is never built for this chain.
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Prepare audit store directory
+        # .audit/ is fully gitignored and nothing creates it -- redb's
+        # Database::create opens/creates the *file* but, like any
+        # standard file-open call, does not create missing parent
+        # directories. A fresh checkout has no .audit/ at all, unlike a
+        # long-lived Codespace where this happened to exist already.
+        run: mkdir -p .audit
+
+      - name: 1. research-agent -- ingest
+        run: |
+          {
+            echo "## 1. research-agent -- ingest"
+            echo
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cargo run -p research-agent --bin ingest 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 2. lab-agents -- attacker
+        run: |
+          {
+            echo "## 2. lab-agents -- attacker"
+            echo
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cargo run -p lab-agents --bin attacker 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 3. lab-agents -- defender
+        run: |
+          {
+            echo "## 3. lab-agents -- defender"
+            echo
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cargo run -p lab-agents --bin defender 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 4. verifier -- verify
+        run: |
+          {
+            echo "## 4. verifier -- verify"
+            echo
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cargo run -p verifier --bin verify 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload audit store
+        # always(): upload whatever was produced even if a later step in
+        # the chain failed, so a broken run is still inspectable.
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab-loop-audit-store-${{ github.run_id }}
+          path: .audit/store.redb
+          retention-days: 30
+          if-no-files-found: warn
