@@ -25,6 +25,15 @@ pub enum EventKind {
     CapabilityDenied,
     ExecutionAttempted,
     ExecutionBlocked,
+    /// A technique with a real execution path (currently only the
+    /// synthetic proving technique — see `research_agent::synthetic`)
+    /// actually ran inside a wasmtime/WASI sandbox and its declared
+    /// operation succeeded.
+    ExecutionSucceeded,
+    /// Same real-execution path as `ExecutionSucceeded`, but the sandboxed
+    /// operation failed — either the capability check denied it before any
+    /// sandbox was constructed, or the WASI runtime itself rejected it.
+    ExecutionFailed,
     DetectionChecked,
     Verdict,
     /// `gate-pipeline`'s deny-pattern static analysis found nothing (used

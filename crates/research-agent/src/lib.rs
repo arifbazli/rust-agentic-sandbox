@@ -7,8 +7,10 @@
 
 mod atomic_red_team;
 mod ingest;
+mod synthetic;
 mod technique;
 
 pub use atomic_red_team::{fetch_category, FetchOutcome};
 pub use ingest::{ingest, IngestReport};
+pub use synthetic::{synthetic_proving_technique, MARKER_CONTENT, SYNTHETIC_SOURCE, SYNTHETIC_TECHNIQUE_ID};
 pub use technique::Technique;
