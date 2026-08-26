@@ -91,6 +91,7 @@ fn resolve_tool_args(tool_args: &serde_json::Value) -> anyhow::Result<serde_json
 ///     -> `Edit`. Useful context on how the hook layer is structured,
 ///     but it's a *name* mapping, not an argument schema — no field
 ///     names surface anywhere in it.
+///
 /// `github/copilot-cli` (a real, public, 11k+-star repo) was checked
 /// directly this round — its contents are only `.github/`,
 /// `LICENSE.md`, `README.md`, `changelog.md`, `install.sh`: a
@@ -101,6 +102,7 @@ fn resolve_tool_args(tool_args: &serde_json::Value) -> anyhow::Result<serde_json
 /// parsing for preToolUse.toolArgs when it is a JSON-encoded string")
 /// confirms this ambiguity is an acknowledged upstream gap, not just
 /// something this project failed to find.
+///
 /// Not attempted this round: dumping the real payload from a live
 /// `create` call via an actual local Copilot CLI install — none was
 /// available in this environment. That's a genuine limitation of this
