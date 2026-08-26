@@ -2,10 +2,13 @@
 //! `cargo run -p lab-agents --bin defender`.
 
 use audit::AuditStore;
+use host::ScopeConfig;
 
 fn main() -> anyhow::Result<()> {
+    let scope = ScopeConfig::load("lab/scope.toml")?;
+    let workspace_root = std::env::current_dir()?;
     let store = AuditStore::open(".audit/store.redb")?;
-    let results = lab_agents::check_all(&store)?;
+    let results = lab_agents::check_all(&scope, &workspace_root, &store)?;
 
     for r in &results {
         println!(

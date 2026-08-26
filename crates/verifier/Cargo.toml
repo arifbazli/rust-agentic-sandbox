@@ -16,3 +16,4 @@ host = { path = "../host" }
 lab-agents = { path = "../lab-agents" }
 research-agent = { path = "../research-agent" }
 tempfile = "3.27.0"
+toml = "1.1.4"
