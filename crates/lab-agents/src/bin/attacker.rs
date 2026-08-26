@@ -1,8 +1,8 @@
 //! Step 2 entry point. Run from the workspace root:
 //! `cargo run -p lab-agents --bin attacker`.
 
-use audit::AuditStore;
-use host::{CapabilityDecision, ScopeConfig};
+use audit::{AuditStore, EventKind};
+use host::ScopeConfig;
 
 fn main() -> anyhow::Result<()> {
     let scope = ScopeConfig::load("lab/scope.toml")?;
@@ -12,14 +12,14 @@ fn main() -> anyhow::Result<()> {
     let attempts = lab_agents::attempt_all(&scope, &workspace_root, &store)?;
 
     for attempt in &attempts {
-        match &attempt.decision {
-            CapabilityDecision::Granted => {
-                println!("[{}] guid {} — GRANTED (no sandbox execution path implemented — see lab-agents crate docs)", attempt.technique_id, attempt.guid)
-            }
-            CapabilityDecision::Denied { reason } => {
-                println!("[{}] guid {} — DENIED: {reason}", attempt.technique_id, attempt.guid)
-            }
-        }
+        let label = match attempt.outcome_kind {
+            EventKind::ExecutionSucceeded => "GRANTED, EXECUTED (succeeded)",
+            EventKind::ExecutionFailed => "GRANTED, EXECUTED (failed)",
+            EventKind::ExecutionBlocked => "GRANTED (no sandbox execution path implemented)",
+            EventKind::CapabilityDenied => "DENIED",
+            other => unreachable!("attempt_all never logs {other:?} for an attempt"),
+        };
+        println!("[{}] guid {} — {label}: {}", attempt.technique_id, attempt.guid, attempt.detail);
     }
 
     println!("\n{} attempt(s) logged to .audit/store.redb", attempts.len());
