@@ -44,10 +44,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # No wasm32-wasip1 target here (unlike ci.yml): none of
-      # research-agent/lab-agents/verifier/host depend on gate-pipeline,
-      # so its WASI dry-run guest is never built for this chain.
+      # wasm32-wasip1 IS required here: lab-agents gained its own
+      # build.rs/guest module (crates/lab-agents/guest/execute_marker_write.rs,
+      # compiled to wasm32-wasip1) for the synthetic proving technique's
+      # real execution engine -- independent of gate-pipeline's own WASI
+      # guest, but needing the same target. This comment used to say the
+      # opposite; that was true when this workflow was first written, not
+      # after lab-agents gained that build script.
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
 
       - name: Prepare audit store directory
         # .audit/ is fully gitignored and nothing creates it -- redb's
